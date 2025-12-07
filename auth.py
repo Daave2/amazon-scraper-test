@@ -139,12 +139,59 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
                     "No passkey bypass option detected. Proceeding without additional interaction.")
 
             await expect(password_field).to_be_visible(timeout=10000)
+        # Use ID selector for password if available (more reliable than label)
+        if await page.locator("input#ap_password").is_visible():
+            password_field = page.locator("input#ap_password")
+            
         await password_field.fill(config['login_password'])
-        await page.get_by_label("Sign in").click()
+        
+        # Verify password was actually entered
+        if await password_field.input_value() == "":
+            app_logger.warning("Password field found empty after fill. Retrying with explicit focus...")
+            await password_field.focus()
+            await password_field.fill(config['login_password'])
+            
+        # Click Sign In (prefer ID over label)
+        sign_in_btn = page.locator("input#signInSubmit")
+        if not await sign_in_btn.is_visible():
+            sign_in_btn = page.get_by_label("Sign in")
+        await sign_in_btn.click()
+        
+        # Immediate check for "Enter your password" validation error
+        # This catches the state shown in the user's screenshot
+        missing_pass_alert = page.locator("#auth-password-missing-alert")
+        try:
+            if await missing_pass_alert.is_visible(timeout=2000):
+                app_logger.warning("Amazon validation error: 'Enter your password'. Retrying password entry...")
+                await password_field.fill(config['login_password'])
+                await sign_in_btn.click()
+        except PlaywrightError:
+            pass # No alert appeared, which is good
         
         otp_selector = 'input[id*="otp"]'
         dashboard_selector = "#content > div > div.mainAppContainerExternal"
-        await page.wait_for_selector(f"{otp_selector}, {dashboard_selector}", timeout=30000)
+        account_picker_selector = 'h1:has-text("Select an account")'
+        captcha_selector = "#auth-captcha-image-container, input[name='captcha']"
+        error_box_selector = "#auth-error-message-box"
+
+        # Wait for any validation (OTP, Dashboard, Account Picker, or Error/Captcha)
+        # This prevents timeout if OTP is skipped and we go straight to Account Picker
+        await page.wait_for_selector(
+            f"{otp_selector}, {dashboard_selector}, {account_picker_selector}, {captcha_selector}, {error_box_selector}", 
+            timeout=30000
+        )
+
+        # Check for blockers
+        if await page.locator(captcha_selector).first.is_visible():
+            app_logger.critical("Login blocked by CAPTCHA.")
+            await _save_screenshot_func(page, "login_captcha_blocked")
+            return False
+            
+        if await page.locator(error_box_selector).first.is_visible():
+            err_text = await page.locator(error_box_selector).first.inner_text()
+            app_logger.critical(f"Login failed with error message: {err_text}")
+            await _save_screenshot_func(page, "login_error_message")
+            return False
 
         otp_field = page.locator(otp_selector)
         if await otp_field.is_visible():
@@ -154,15 +201,27 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
             if await page.locator("input[type='checkbox'][name='rememberDevice']").is_visible():
                 await page.locator("input[type='checkbox'][name='rememberDevice']").check()
             await page.get_by_role("button", name="Sign in").click()
+            
+            # Wait for final destination after OTP
+            await page.wait_for_selector(f"{dashboard_selector}, {account_picker_selector}", timeout=30000)
 
-        account_picker_selector = 'h1:has-text("Select an account")'
-        await page.wait_for_selector(f"{dashboard_selector}, {account_picker_selector}", timeout=30000)
+        # At this point we should be at Dashboard or Account Picker
+        # Verify visibility to be sure (optional, but good for logging)
+        if not (await page.locator(dashboard_selector).is_visible() or await page.locator(account_picker_selector).is_visible()):
+             app_logger.warning("Unsure of login state: Dashboard/Account Picker not immediately visible after flow.")
         
         app_logger.info("Login process appears fully successful.")
         return True
     except Exception as e:
         app_logger.critical(f"Critical error during login process: {e}", exc_info=debug_mode)
         await _save_screenshot_func(page, "login_critical_failure")
+        try:
+            html_content = await page.content()
+            with open("output/login_critical_dump.html", "w", encoding="utf-8") as f:
+                f.write(html_content)
+            app_logger.info("Saved page HTML to 'output/login_critical_dump.html' for inspection.")
+        except Exception as dump_error:
+            app_logger.warning(f"Failed to save HTML dump: {dump_error}")
         return False
 
 
