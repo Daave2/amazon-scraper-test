@@ -1,0 +1,50 @@
+{
+  "secret_key": "YOUR_SECRET_KEY",
+  "chat_webhook_url": "https://chat.googleapis.com/...",
+  "inf_webhook_url": "https://chat.googleapis.com/...",
+  "store_webhook_url": "https://chat.googleapis.com/...",
+  "performance_webhook_url": "https://chat.googleapis.com/...",
+  "chat_batch_size": 25,
+  "form_url": "https://docs.google.com/forms/.../viewform",
+  "login_url": "https://sellercentral.amazon.co.uk/ap/signin?...",
+  "login_email": "you@example.com",
+  "login_password": "your_password",
+  "otp_secret_key": "OTP_SECRET",
+  "max_concurrency": 35,
+  "min_concurrency": 1,
+  "initial_concurrency": 5,
+  "num_form_submitters": 5,
+  "marketplace_id": "YOUR_MARKETPLACE_ID",
+  "target_url": "https://sellercentral.amazon.co.uk/snowdash?...",
+  "debug": false,
+  "schedule_times": [
+    "10:00",
+    "16:00",
+    "19:00"
+  ],
+  "auto_concurrency": {
+    "enabled": true,
+    "min_concurrency": 1,
+    "max_concurrency": 35,
+    "cpu_upper_threshold": 90,
+    "cpu_lower_threshold": 65,
+    "mem_upper_threshold": 90,
+    "check_interval_seconds": 5,
+    "cooldown_seconds": 15
+  },
+  "morrisons_api_key": "YOUR_MORRISONS_API_KEY",
+  "morrisons_bearer_token_url": "https://gist.githubusercontent.com/YOUR_USERNAME/GIST_ID/raw/FILE",
+  "enrich_stock_data": true,
+  "use_date_range": false,
+  "date_range_mode": "today",
+  "relative_days": 0,
+  "custom_start_date": "11/27/2025",
+  "custom_end_date": "11/27/2025",
+  "start_time": "12:00 AM",
+  "end_time": "11:59 PM",
+  "apps_script_whitelist_enabled": true,
+  "apps_script_whitelist": [
+    "niki.cooke@morrisonsplc.co.uk"
+  ],
+  "inventory_system_url": "https://amazon-product-analysis-584939250419.us-west1.run.app/assistant/{sku}?locationId={store_number}"
+}

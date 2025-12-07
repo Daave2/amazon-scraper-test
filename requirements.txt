@@ -1,0 +1,12 @@
+# requirements.txt
+playwright
+pyotp
+psutil
+pytz
+aiohttp
+certifi
+aiofiles
+pytest
+pytest-asyncio
+requests
+qrcode[pil]

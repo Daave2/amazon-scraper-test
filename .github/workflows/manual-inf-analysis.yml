@@ -1,0 +1,199 @@
+name: Manual INF Analysis
+
+# ==============================================================================
+# This workflow runs INF analysis on demand via repository_dispatch.
+# It can be triggered from Google Chat, Apps Script, or any external system.
+# ==============================================================================
+
+on:
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      date_mode:
+        description: 'Date range mode'
+        required: false
+        default: 'today'
+        type: choice
+        options:
+          - today
+          - yesterday
+          - last_7_days
+          - last_30_days
+          - week_to_date
+          - relative
+          - custom
+      relative_days:
+        description: 'Days offset for relative mode (e.g., -1 for yesterday)'
+        required: false
+        default: '0'
+      custom_start_date:
+        description: 'Start date (MM/DD/YYYY) for custom mode'
+        required: false
+      custom_end_date:
+        description: 'End date (MM/DD/YYYY) for custom mode'
+        required: false
+      top_n:
+        description: 'Number of top items to show per store (5, 10, or 25)'
+        required: false
+        default: '10'
+        type: choice
+        options:
+          - '5'
+          - '10'
+          - '25'
+
+  # API trigger from external systems (Apps Script, etc.)
+  repository_dispatch:
+    types:
+      - run-inf-analysis
+
+concurrency:
+  group: inf-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  inf-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+
+    - name: Install Playwright browsers & deps
+      run: python -m playwright install --with-deps chromium
+
+    - name: Build runtime config from Secrets
+      env:
+        LOGIN_URL:       ${{ secrets.LOGIN_URL }}
+        SECRET_KEY:      ${{ secrets.SECRET_KEY }}
+        LOGIN_EMAIL:     ${{ secrets.LOGIN_EMAIL }}
+        LOGIN_PASSWORD:  ${{ secrets.LOGIN_PASSWORD }}
+        OTP_SECRET_KEY:  ${{ secrets.OTP_SECRET_KEY }}
+        CHAT_WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK_URL }}
+        MORRISONS_API_KEY: ${{ secrets.MORRISONS_API_KEY }}
+        MORRISONS_BEARER_TOKEN_URL: ${{ secrets.MORRISONS_BEARER_TOKEN_URL }}
+        APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+      run: |
+        cat > config.json <<JSON
+        {
+          "debug": false,
+          "login_url":       "${LOGIN_URL}",
+          "secret_key":      "${SECRET_KEY}",
+          "login_email":     "${LOGIN_EMAIL}",
+          "login_password":  "${LOGIN_PASSWORD}",
+          "otp_secret_key":  "${OTP_SECRET_KEY}",
+          "chat_webhook_url": "${CHAT_WEBHOOK_URL}",
+          "apps_script_webhook_url": "${APPS_SCRIPT_WEBHOOK_URL}",
+          "page_timeout_ms": 90000,
+          "element_wait_timeout_ms": 20000,
+          "use_date_range": false,
+          "morrisons_api_key": "${MORRISONS_API_KEY}",
+          "morrisons_bearer_token_url": "${MORRISONS_BEARER_TOKEN_URL}",
+          "enrich_stock_data": true,
+          "inventory_system_url": "https://amazon-product-analysis-584939250419.us-west1.run.app/assistant/{sku}?locationId={store_number}"
+        }
+        JSON
+
+    - name: Download auth state from previous run
+      uses: dawidd6/action-download-artifact@v6
+      with:
+        workflow: run-scraper.yml
+        name: auth-state
+        path: .
+        if_no_artifact_found: warn
+        search_artifacts: true
+
+    - name: Run INF analysis with parameters
+      env:
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+      run: |
+        # Determine parameters - prioritize repository_dispatch payload, then workflow_dispatch input
+        if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+          # Extract parameters from client_payload
+          DATE_MODE="${{ github.event.client_payload.date_mode || 'today' }}"
+          RELATIVE_DAYS="${{ github.event.client_payload.relative_days || '0' }}"
+          CUSTOM_START="${{ github.event.client_payload.custom_start_date || '' }}"
+          CUSTOM_END="${{ github.event.client_payload.custom_end_date || '' }}"
+          TOP_N="${{ github.event.client_payload.top_n || '10' }}"
+          echo "Repository dispatch trigger - INF Analysis"
+          echo "Date mode: $DATE_MODE"
+          echo "Top N items: $TOP_N"
+          echo "Requested by: ${{ github.event.client_payload.requested_by || 'unknown' }}"
+          
+          # Update config with top_n setting
+          jq --arg top_n "$TOP_N" '.top_n_items = ($top_n | tonumber)' config.json > config.tmp.json
+          mv config.tmp.json config.json
+        else
+          # Use workflow_dispatch inputs
+          DATE_MODE="${{ github.event.inputs.date_mode || 'today' }}"
+          RELATIVE_DAYS="${{ github.event.inputs.relative_days || '0' }}"
+          CUSTOM_START="${{ github.event.inputs.custom_start_date || '' }}"
+          CUSTOM_END="${{ github.event.inputs.custom_end_date || '' }}"
+          TOP_N="${{ github.event.inputs.top_n || '10' }}"
+          
+          # Update config with top_n setting
+          jq --arg top_n "$TOP_N" '.top_n_items = ($top_n | tonumber)' config.json > config.tmp.json
+          mv config.tmp.json config.json
+        fi
+        
+        # Build command based on date mode
+        if [ "$DATE_MODE" = "yesterday" ]; then
+          python inf_scraper.py --date-mode yesterday
+        elif [ "$DATE_MODE" = "last_7_days" ]; then
+          python inf_scraper.py --date-mode last_7_days
+        elif [ "$DATE_MODE" = "last_30_days" ]; then
+          python inf_scraper.py --date-mode last_30_days
+        elif [ "$DATE_MODE" = "week_to_date" ]; then
+          python inf_scraper.py --date-mode week_to_date
+        elif [ "$DATE_MODE" = "relative" ]; then
+          python inf_scraper.py --date-mode relative --relative-days "$RELATIVE_DAYS" \
+            --start-time "12:00 AM" --end-time "11:59 PM"
+        elif [ "$DATE_MODE" = "custom" ]; then
+          python inf_scraper.py --date-mode custom \
+            --start-date "$CUSTOM_START" \
+            --end-date "$CUSTOM_END" \
+            --start-time "12:00 AM" \
+            --end-time "11:59 PM"
+        else
+          # Default: today - INF page already shows today by default, no date selection needed
+          python inf_scraper.py
+        fi
+
+    - name: Upload artifacts on failure or success
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: inf-analysis-output-${{ github.run_id }}
+        path: |
+          output/
+          app.log
+          state.json
+        retention-days: 7
+
+    - name: Upload auth state
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: auth-state
+        path: state.json
+        retention-days: 7
+        overwrite: true
