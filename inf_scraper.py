@@ -698,13 +698,13 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
     stores_with_data = [(name, num, items, inf_rate) for name, num, items, inf_rate in sorted_store_data if items]
     
     # Dynamic batch size based on items shown
-    # With simplified text-only format (no images/QR codes), we can fit MANY more stores per batch
+    # Reduced batch sizes due to added API details increasing payload size
     if top_n <= 5:
-        BATCH_SIZE = 30  # Was 8 - much smaller payloads now with text-only format
+        BATCH_SIZE = 15  # Was 30
     elif top_n <= 10:
-        BATCH_SIZE = 20  # Was 4 - simplified cards allow more stores
+        BATCH_SIZE = 10  # Was 20
     else:  # top_n >= 25
-        BATCH_SIZE = 15  # Was 3 - even with 25 items, text is tiny compared to images
+        BATCH_SIZE = 5   # Was 15
     
     batches = [stores_with_data[i:i + BATCH_SIZE] for i in range(0, len(stores_with_data), BATCH_SIZE)]
     
@@ -732,6 +732,19 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
                     line += f" - £{item['price']:.2f}"
                 
                 product_lines.append(line)
+                
+                # Add API details if available (Phase 2)
+                details = []
+                if item.get('orders_impacted'):
+                    details.append(f"Impact: {item['orders_impacted']}")
+                if item.get('picking_window'):
+                    details.append(f"Window: {item['picking_window']}")
+                if item.get('replacement_percent') is not None:
+                    details.append(f"Repl: {item['replacement_percent']}%")
+                
+                if details:
+                    # Add details in grey text (removed <small> as it is not supported in Google Chat)
+                    product_lines.append(f"  <font color=\"#666666\">{' | '.join(details)}</font>")
             
             # Add product list as single text paragraph
             if product_lines:
@@ -845,6 +858,10 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
 async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: Browser = None, config_override: Dict = None):
     app_logger.info("Starting INF Analysis...")
     
+    # Initialize variables to prevent UnboundLocalError in finally block
+    should_post_quick_actions = False
+    skip_network_report = False
+    
     # Load stores if not provided
     if target_stores is None:
         urls_data = []
@@ -891,7 +908,11 @@ async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: B
             if login_needed:
                  app_logger.info("Performing login...")
                  page = await browser.new_page()
-                 if not await perform_login_and_otp(page, LOGIN_URL, config, PAGE_TIMEOUT, DEBUG_MODE, app_logger, _save_screenshot):
+                 # Define wrapper for screenshot function to match expected signature in auth.py
+                 async def save_screenshot_wrapper(p, name):
+                     await _save_screenshot(p, name, OUTPUT_DIR, LOCAL_TIMEZONE, app_logger)
+                
+                 if not await perform_login_and_otp(page, LOGIN_URL, config, PAGE_TIMEOUT, DEBUG_MODE, app_logger, save_screenshot_wrapper):
                      app_logger.error("Login failed.")
                      if local_playwright: await local_playwright.stop()
                      return
