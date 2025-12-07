@@ -4,6 +4,7 @@
 
 import json
 import re
+import asyncio
 import pyotp
 from playwright.async_api import Page, Browser, TimeoutError, expect, Error as PlaywrightError
 from typing import Any
@@ -143,15 +144,24 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
             password_field = page.locator("input#ap_password")
         
         # Aggressive filling strategy: Click -> Clear -> Slow Type
-        await password_field.click()
-        await password_field.clear()
+        # Debug password presence (safe logging)
+        pwd_len = len(config.get('login_password', '') or '')
+        app_logger.info(f"Attempting to fill password (length: {pwd_len})")
+
+        try:
+            await password_field.click(timeout=2000)
+            await password_field.clear()
+        except:
+            app_logger.warning("Could not click/clear password field typically. Forcing fill.")
+
         # Fallback to standard fill first
         await password_field.fill(config['login_password'])
         
         # Verify and retry triggers aggressive human-like typing
         if await password_field.input_value() == "":
-            app_logger.warning("Password field empty. trying aggressive slow type...")
+            app_logger.warning("Password field empty after fill. Trying aggressive slow type...")
             await password_field.focus()
+            await asyncio.sleep(0.5) # Wait for focus
             await page.keyboard.type(config['login_password'], delay=100)
             
         # Click Sign In (prefer ID over label)
@@ -159,7 +169,7 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
         if not await sign_in_btn.is_visible():
             sign_in_btn = page.get_by_label("Sign in")
             
-        # Try clicking, but also consider pressing Enter if that clicked failed previously
+        # Try clicking
         await sign_in_btn.click()
         
         # Immediate check for "Enter your password" validation error
@@ -167,10 +177,14 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
         missing_pass_alert = page.locator("#auth-password-missing-alert")
         try:
             if await missing_pass_alert.is_visible(timeout=2000):
-                app_logger.warning("Amazon validation error: 'Enter your password'. Retrying password entry...")
-                await password_field.fill(config['login_password'])
+                app_logger.warning("Amazon validation error: 'Enter your password'. Retrying with aggressive typing...")
+                # Retry with robust typing instead of just fill
+                await password_field.click()
+                await password_field.focus()
+                await asyncio.sleep(0.5)
+                await page.keyboard.type(config['login_password'], delay=100)
                 await sign_in_btn.click()
-        except PlaywrightError:
+        except Exception:
             pass # No alert appeared, which is good
         
         otp_selector = 'input[id*="otp"]'
