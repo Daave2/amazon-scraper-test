@@ -6,7 +6,8 @@ import json
 import re
 import pyotp
 from playwright.async_api import Page, Browser, TimeoutError, expect, Error as PlaywrightError
-from typing import Any
+import asyncio
+from typing import Any, Optional, Callable
 
 
 async def check_if_login_needed(page: Page, test_url: str, page_timeout: int, debug_mode: bool, app_logger) -> bool:

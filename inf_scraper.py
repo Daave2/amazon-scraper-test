@@ -861,6 +861,7 @@ async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: B
     # Initialize variables to prevent UnboundLocalError in finally block
     should_post_quick_actions = False
     skip_network_report = False
+    apps_script_url = None
     
     # Load stores if not provided
     if target_stores is None:
