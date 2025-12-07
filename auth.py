@@ -55,6 +55,9 @@ async def check_if_login_needed(page: Page, test_url: str, page_timeout: int, de
 
 async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_timeout: int, 
                                 debug_mode: bool, app_logger, _save_screenshot_func) -> bool:
+    if not config.get('login_email') or not config.get('login_password'):
+        app_logger.critical("Missing login credentials (email or password) in configuration. Aborting login.")
+        return False
     app_logger.info(f"Navigating to login page: {login_url}")
     try:
         await page.goto(login_url, timeout=page_timeout, wait_until="load")
@@ -144,10 +147,6 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
             password_field = page.locator("input#ap_password")
         
         # Aggressive filling strategy: Click -> Clear -> Slow Type
-        # Debug password presence (safe logging)
-        pwd_len = len(config.get('login_password', '') or '')
-        app_logger.info(f"Attempting to fill password (length: {pwd_len})")
-
         try:
             await password_field.click(timeout=2000)
             await password_field.clear()
