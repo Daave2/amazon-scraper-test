@@ -315,7 +315,7 @@ async def _extract_from_html(page: Page, store_name: str, top_n: int = 10) -> li
                     "asin": "",
                     "orders_impacted": 0,
                     "short_count": 0,
-                    "replacement_percent": 0,
+                    "replacement_percent": None,
                     "picking_window": "",
                     "day_of_week": "",
                     "units_shipped": 0,
