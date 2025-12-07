@@ -148,9 +148,119 @@ def upload_csv_to_gist(csv_file_path: str, description: str) -> str:
         return ""
 
 
-async def navigate_and_extract_inf(page: Page, store_name: str, top_n: int = 10):
-    """Extract INF data from the already-loaded INF page"""
+async def navigate_and_extract_inf(page: Page, store_name: str, top_n: int = 10, captured_api_data: dict = None):
+    """
+    Extract INF data using API response interception (primary) or HTML scraping (fallback).
+    
+    Args:
+        page: Playwright page object
+        store_name: Name of the store
+        top_n: Maximum number of items to extract
+        captured_api_data: Dictionary containing captured API responses (from response interception)
+    
+    Returns:
+        List of INF item dictionaries with both existing and new fields
+    """
     app_logger.info(f"Extracting INF data for: {store_name}")
+    
+    # Try API-first extraction if we have captured data
+    if captured_api_data and captured_api_data.get('GetAllByAsin'):
+        app_logger.info(f"[{store_name}] Using API-first extraction")
+        try:
+            return await _extract_from_api(store_name, top_n, captured_api_data)
+        except Exception as e:
+            app_logger.warning(f"[{store_name}] API extraction failed: {e}, falling back to HTML scraping")
+    
+    # Fallback to HTML scraping
+    app_logger.info(f"[{store_name}] Using HTML scraping fallback")
+    return await _extract_from_html(page, store_name, top_n)
+
+
+async def _extract_from_api(store_name: str, top_n: int, captured_api_data: dict) -> list:
+    """Extract INF data from captured API responses (7 new fields available!)"""
+    
+    inf_response = captured_api_data.get('GetAllByAsin', {})
+    item_data_response = captured_api_data.get('ItemData', {})
+    
+    # Handle if response is a list (e.g. empty list or direct list of items)
+    if isinstance(inf_response, list):
+        items = inf_response
+    else:
+        # Handle different API response structures (dict)
+        items = inf_response.get('infMetrics') or inf_response.get('infDataList') or []
+    
+    if not items:
+        app_logger.info(f"[{store_name}] No INF items in API response")
+        return []
+    
+    # Parse item data for product names and images
+    product_info = {}
+    if item_data_response:
+        # Handle if ItemData is a list
+        if isinstance(item_data_response, list):
+            products = item_data_response
+        else:
+            products = item_data_response.get('data', [])
+            
+        if isinstance(products, str):
+            import ast
+            try:
+                products = ast.literal_eval(products)
+            except:
+                products = []
+        
+        # Ensure products is a list before iterating
+        if not isinstance(products, list):
+            products = []
+            
+        for prod in products:
+            if not isinstance(prod, dict): continue
+            sku = prod.get('merchantSku')
+            if sku:
+                product_info[sku] = {
+                    'name': prod.get('name', ''),
+                    'image_url': prod.get('imageUrl', ''),
+                    'thumbnail_url': prod.get('thumbnailUrl', ''),
+                    'product_url': prod.get('productUrl', ''),
+                    'category': prod.get('category', ''),
+                }
+    
+    # Sort by INF count (highest first) and take top N
+    sorted_items = sorted(items, key=lambda x: x.get('infCount', 0), reverse=True)
+    
+    extracted_data = []
+    for item in sorted_items[:top_n]:
+        sku = item.get('merchantSku', '')
+        prod = product_info.get(sku, {})
+        
+        extracted_data.append({
+            # Existing fields (compatible with current code)
+            "store": store_name,
+            "sku": sku,
+            "name": prod.get('name', ''),
+            "inf": item.get('infCount', 0),
+            "image_url": prod.get('image_url', ''),
+            
+            # NEW FIELDS from API
+            "asin": item.get('asin', ''),
+            "orders_impacted": item.get('ordersImpacted', 0),
+            "short_count": item.get('shortCount', 0),
+            "replacement_percent": item.get('successfulReplacementPercent', 0),
+            "picking_window": item.get('pickingWindow', ''),
+            "day_of_week": item.get('dayOfWeek', ''),
+            "units_shipped": item.get('unitsShipped', 0),
+            
+            # Additional from item/data API
+            "category": prod.get('category', ''),
+            "product_url": prod.get('product_url', ''),
+        })
+    
+    app_logger.info(f"[{store_name}] API extraction: {len(extracted_data)} items with {len(extracted_data[0]) if extracted_data else 0} fields each")
+    return extracted_data
+
+
+async def _extract_from_html(page: Page, store_name: str, top_n: int = 10) -> list:
+    """Fallback: Extract INF data by scraping HTML table (original method)"""
     
     try:
         # Define table selector
@@ -161,20 +271,19 @@ async def navigate_and_extract_inf(page: Page, store_name: str, top_n: int = 10)
             await expect(page.locator(f"{table_sel} tr").first).to_be_visible(timeout=20000)
         except (TimeoutError, AssertionError):
             app_logger.info(f"[{store_name}] No data rows found (or table not visible); returning empty list.")
-            # Take a debug screenshot to verify if it's truly empty or a loading issue
             await _save_screenshot(page, f"debug_empty_{sanitize_store_name(store_name, STORE_PREFIX_RE)}", "output", timezone('Europe/London'), app_logger)
             return []
         
-        # Sort by INF Occurrences (only thing we need!)
+        # Sort by INF Occurrences
         try:
             inf_sort = page.get_by_role("link", name="INF Occurrences")
             await inf_sort.click()
-            await page.wait_for_timeout(2000)  # Wait for table to sort
+            await page.wait_for_timeout(2000)
             app_logger.info(f"[{store_name}] Sorted by INF Occurrences")
         except Exception as e:
             app_logger.warning(f"[{store_name}] Failed to sort: {e}")
 
-        # Extract Data - top N rows based on configuration
+        # Extract Data - top N rows
         rows = await page.locator(f"{table_sel} tr").all()
         app_logger.info(f"[{store_name}] Found {len(rows)} rows; extracting top {top_n}")
         
@@ -201,12 +310,22 @@ async def navigate_and_extract_inf(page: Page, store_name: str, top_n: int = 10)
                     "sku": sku,
                     "name": product_name,
                     "inf": inf_value,
-                    "image_url": img_url
+                    "image_url": img_url,
+                    # Placeholder fields for API data (not available in HTML)
+                    "asin": "",
+                    "orders_impacted": 0,
+                    "short_count": 0,
+                    "replacement_percent": 0,
+                    "picking_window": "",
+                    "day_of_week": "",
+                    "units_shipped": 0,
+                    "category": "",
+                    "product_url": "",
                 })
             except Exception as e:
                 app_logger.warning(f"[{store_name}] Error extracting row {i}: {e}")
         
-        app_logger.info(f"[{store_name}] Extracted {len(extracted_data)} items.")
+        app_logger.info(f"[{store_name}] HTML extraction: {len(extracted_data)} items.")
         return extracted_data
 
     except Exception as e:
@@ -222,10 +341,32 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
     inf_rate = store_info.get('inf_rate', 'N/A')
     
     page = None
+    # Dictionary to capture API responses
+    captured_api_data = {}
+    
     try:
         page = await context.new_page()
         
-        # Navigate directly to INF page with store context (like reference script)
+        # Set up API response interception BEFORE navigation
+        async def capture_api_response(response):
+            url = response.url
+            try:
+                if '/inf/GetAllByAsin' in url:
+                    content_type = response.headers.get('content-type', '')
+                    if 'json' in content_type:
+                        captured_api_data['GetAllByAsin'] = await response.json()
+                        app_logger.debug(f"[{store_name}] Captured GetAllByAsin API response")
+                elif '/item/data' in url:
+                    content_type = response.headers.get('content-type', '')
+                    if 'json' in content_type:
+                        captured_api_data['ItemData'] = await response.json()
+                        app_logger.debug(f"[{store_name}] Captured ItemData API response")
+            except Exception as e:
+                app_logger.debug(f"[{store_name}] Error capturing API response: {e}")
+        
+        page.on("response", capture_api_response)
+        
+        # Navigate directly to INF page with store context
         inf_url = (
             "https://sellercentral.amazon.co.uk/snow-inventory/inventoryinsights/"
             f"?ref_=mp_home_logo_xx&cor=mmp_EU"
@@ -235,6 +376,9 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
         
         await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
         
+        # Wait a moment for API responses to complete
+        await page.wait_for_timeout(3000)
+        
         # Apply date range if configured (same as main scraper)
         if date_range_func:
             date_range_applied = await apply_date_time_range(
@@ -242,11 +386,13 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
             )
             if date_range_applied:
                 app_logger.info(f"[{store_name}] Date range applied to INF page")
+                # Wait for new API data after date range change
+                await page.wait_for_timeout(2000)
             else:
                 app_logger.warning(f"[{store_name}] Could not apply date range to INF page, using default")
         
-        # Now extract INF data
-        items = await navigate_and_extract_inf(page, store_name, top_n)
+        # Now extract INF data (will use API-first if data captured, else HTML fallback)
+        items = await navigate_and_extract_inf(page, store_name, top_n, captured_api_data)
         
         # Enrich with stock data if enabled and we have a store number
         if ENRICH_STOCK_DATA and store_number and items and MORRISONS_API_KEY:
