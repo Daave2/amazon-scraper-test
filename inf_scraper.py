@@ -254,6 +254,10 @@ async def _extract_from_api(store_name: str, top_n: int, captured_api_data: dict
             "category": prod.get('category', ''),
             "product_url": prod.get('product_url', ''),
         })
+        
+        # Fallback for missing name if product lookup failed
+        if not extracted_data[-1]['name']:
+             extracted_data[-1]['name'] = item.get('name') or item.get('title') or item.get('productName') or ''
     
     app_logger.info(f"[{store_name}] API extraction: {len(extracted_data)} items with {len(extracted_data[0]) if extracted_data else 0} fields each")
     return extracted_data
@@ -374,22 +378,52 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
             f"&mons_sel_mkid={marketplace_id}"
         )
         
-        await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
-        
-        # Wait a moment for API responses to complete
-        await page.wait_for_timeout(3000)
-        
-        # Apply date range if configured (same as main scraper)
-        if date_range_func:
-            date_range_applied = await apply_date_time_range(
-                page, store_name, date_range_func, action_timeout, DEBUG_MODE, app_logger
-            )
-            if date_range_applied:
-                app_logger.info(f"[{store_name}] Date range applied to INF page")
-                # Wait for new API data after date range change
-                await page.wait_for_timeout(2000)
+        # Attempt navigation and API capture with retries
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Clear previous partial data to ensure a fresh capture on retry
+            captured_api_data.clear()
+            
+            if attempt > 0:
+                app_logger.info(f"[{store_name}] Retrying API capture (Attempt {attempt + 1}/{max_retries})...")
+            
+            await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
+            
+            # Wait a moment for API responses to complete
+            await page.wait_for_timeout(3000)
+            
+            # Apply date range if configured (same as main scraper)
+            if date_range_func:
+                date_range_applied = await apply_date_time_range(
+                    page, store_name, date_range_func, action_timeout, DEBUG_MODE, app_logger
+                )
+                if date_range_applied:
+                    app_logger.info(f"[{store_name}] Date range applied to INF page")
+                    # Wait for new API data after date range change
+                    await page.wait_for_timeout(2000)
+                else:
+                    app_logger.warning(f"[{store_name}] Could not apply date range to INF page, using default")
+
+            # Check if we got the main API response
+            if captured_api_data.get('GetAllByAsin'):
+                app_logger.info(f"[{store_name}] Main API data (GetAllByAsin) captured.")
+                
+                # Wait for ItemData (product names) if not yet captured
+                if not captured_api_data.get('ItemData'):
+                     app_logger.info(f"[{store_name}] Waiting for ItemData (names)...")
+                     for _ in range(6): # Wait up to 3s (6 * 500ms)
+                         await page.wait_for_timeout(500)
+                         if captured_api_data.get('ItemData'):
+                             break
+                
+                if captured_api_data.get('ItemData'):
+                    app_logger.info(f"[{store_name}] ItemData captured successfully.")
+                else:
+                    app_logger.warning(f"[{store_name}] ItemData NOT captured. Product names may be missing.")
+                
+                break
             else:
-                app_logger.warning(f"[{store_name}] Could not apply date range to INF page, using default")
+                app_logger.warning(f"[{store_name}] Main API data (GetAllByAsin) not captured.")
         
         # Now extract INF data (will use API-first if data captured, else HTML fallback)
         items = await navigate_and_extract_inf(page, store_name, top_n, captured_api_data)
