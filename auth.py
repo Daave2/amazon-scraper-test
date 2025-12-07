@@ -139,22 +139,27 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
                     "No passkey bypass option detected. Proceeding without additional interaction.")
 
             await expect(password_field).to_be_visible(timeout=10000)
-        # Use ID selector for password if available (more reliable than label)
         if await page.locator("input#ap_password").is_visible():
             password_field = page.locator("input#ap_password")
-            
+        
+        # Aggressive filling strategy: Click -> Clear -> Slow Type
+        await password_field.click()
+        await password_field.clear()
+        # Fallback to standard fill first
         await password_field.fill(config['login_password'])
         
-        # Verify password was actually entered
+        # Verify and retry triggers aggressive human-like typing
         if await password_field.input_value() == "":
-            app_logger.warning("Password field found empty after fill. Retrying with explicit focus...")
+            app_logger.warning("Password field empty. trying aggressive slow type...")
             await password_field.focus()
-            await password_field.fill(config['login_password'])
+            await page.keyboard.type(config['login_password'], delay=100)
             
         # Click Sign In (prefer ID over label)
         sign_in_btn = page.locator("input#signInSubmit")
         if not await sign_in_btn.is_visible():
             sign_in_btn = page.get_by_label("Sign in")
+            
+        # Try clicking, but also consider pressing Enter if that clicked failed previously
         await sign_in_btn.click()
         
         # Immediate check for "Enter your password" validation error
