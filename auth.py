@@ -139,7 +139,15 @@ async def perform_login_and_otp(page: Page, login_url: str, config: dict, page_t
                     "No passkey bypass option detected. Proceeding without additional interaction.")
 
             await expect(password_field).to_be_visible(timeout=10000)
+        await password_field.click()
         await password_field.fill(config['login_password'])
+        
+        # Verify password was entered
+        if not await password_field.input_value():
+            app_logger.warning("Password field empty after fill, trying type...")
+            await password_field.type(config['login_password'], delay=50)
+            
+        await asyncio.sleep(0.5)
         await page.get_by_label("Sign in").click()
         
         otp_selector = 'input[id*="otp"]'
