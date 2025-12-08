@@ -389,8 +389,8 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
             
             await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
             
-            # Wait a moment for API responses to complete
-            await page.wait_for_timeout(3000)
+            # Wait for API responses to complete (reduced from 3s to 1.5s)
+            await page.wait_for_timeout(1500)
             
             # Apply date range if configured (same as main scraper)
             if date_range_func:
@@ -399,28 +399,14 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
                 )
                 if date_range_applied:
                     app_logger.info(f"[{store_name}] Date range applied to INF page")
-                    # Wait for new API data after date range change
-                    await page.wait_for_timeout(2000)
+                    # Wait for new API data after date range change (reduced from 2s to 1s)
+                    await page.wait_for_timeout(1000)
                 else:
                     app_logger.warning(f"[{store_name}] Could not apply date range to INF page, using default")
 
             # Check if we got the main API response
             if captured_api_data.get('GetAllByAsin'):
-                app_logger.info(f"[{store_name}] Main API data (GetAllByAsin) captured.")
-                
-                # Wait for ItemData (product names) if not yet captured
-                if not captured_api_data.get('ItemData'):
-                     app_logger.info(f"[{store_name}] Waiting for ItemData (names)...")
-                     for _ in range(6): # Wait up to 3s (6 * 500ms)
-                         await page.wait_for_timeout(500)
-                         if captured_api_data.get('ItemData'):
-                             break
-                
-                if captured_api_data.get('ItemData'):
-                    app_logger.info(f"[{store_name}] ItemData captured successfully.")
-                else:
-                    app_logger.warning(f"[{store_name}] ItemData NOT captured. Product names may be missing.")
-                
+                app_logger.info(f"[{store_name}] API data captured successfully")
                 break
             else:
                 app_logger.warning(f"[{store_name}] Main API data (GetAllByAsin) not captured.")
@@ -890,12 +876,16 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
 
 
 async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: Browser = None, config_override: Dict = None):
+    import time
+    _start_time = time.time()
+    
     app_logger.info("Starting INF Analysis...")
     
     # Initialize variables to prevent UnboundLocalError in finally block
     should_post_quick_actions = False
     skip_network_report = False
     apps_script_url = None
+    urls_data = None  # For timing summary
     
     # Load stores if not provided
     if target_stores is None:
@@ -1246,6 +1236,21 @@ async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: B
                 app_logger.error(f"Failed to post quick actions card: {quick_actions_error}", exc_info=DEBUG_MODE)
         elif not apps_script_url:
             app_logger.info("Skipping quick actions card because apps_script_webhook_url is not configured")
+
+        # Performance Summary
+        try:
+            total_time = time.time() - _start_time
+            app_logger.info("=" * 60)
+            app_logger.info("PERFORMANCE SUMMARY")
+            app_logger.info("=" * 60)
+            app_logger.info(f"Total Runtime: {total_time:.2f}s ({total_time/60:.2f} minutes)")
+            if urls_data:
+                app_logger.info(f"Stores Processed: {len(urls_data)}")
+                avg_per_store = total_time / len(urls_data)
+                app_logger.info(f"Avg Time per Store: {avg_per_store:.2f}s")
+            app_logger.info("=" * 60)
+        except Exception as timing_err:
+            app_logger.debug(f"Error logging timing summary: {timing_err}")
 
         if local_playwright:
             if browser: await browser.close()

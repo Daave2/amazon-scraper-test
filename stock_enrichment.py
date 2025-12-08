@@ -137,6 +137,27 @@ def _fetch_morrisons_data_for_sku(sku: str, location_id: str, api_key: str, bear
         
         # Extract image URL from product data if available
         if product_data:
+            # Extract product name/description - prioritize customer-friendly fields
+            product_name = ""
+            # Priority order based on actual Morrisons API structure:
+            # 1. customerFriendlyDescription - best for display
+            # 2. itemDescription - uppercase but complete
+            # 3. tillDescription - short name
+            # 4. productMarketing - longer description
+            name_fields = ['customerFriendlyDescription', 'itemDescription', 'tillDescription', 
+                          'productMarketing', 'name', 'description', 'title']
+            
+            for field in name_fields:
+                value = product_data.get(field)
+                if value and isinstance(value, str) and value.strip():
+                    product_name = value.strip()
+                    results["name"] = product_name
+                    app_logger.debug(f"Found product name for SKU {sku} in '{field}': {product_name[:50]}")
+                    break
+            
+            if not product_name:
+                app_logger.debug(f"No product name found for SKU {sku}. Available keys: {list(product_data.keys())[:10]}")
+            
             images = product_data.get("imageUrl", [])
             if images and isinstance(images, list):
                 # Use the first image found
