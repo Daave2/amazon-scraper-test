@@ -68,6 +68,17 @@ function getReportForDate(dateKey) {
   const result = getDashboardData();
   if (!result.ok) return result;
   
+  // Calculate previous day
+  const prevDate = new Date(dateKey);
+  prevDate.setDate(prevDate.getDate() - 1);
+  const prevDateKey = prevDate.toISOString().split('T')[0];
+  
+  // Get previous day summary for trend comparison
+  let prevSummary = null;
+  if (result.data.performance && result.data.performance[prevDateKey]) {
+    prevSummary = result.data.performance[prevDateKey].summary || null;
+  }
+  
   // Handle new format (data in performance.{date})
   if (result.data.performance && result.data.performance[dateKey]) {
     const performance = result.data.performance[dateKey];
@@ -77,6 +88,7 @@ function getReportForDate(dateKey) {
       timestamp: result.data.metadata?.last_updated,
       regions: performance.regions || {},
       summary: performance.summary || {},
+      prev_summary: prevSummary,
       stores_count: performance.stores_count || 0,
       available_dates: result.data.metadata?.available_dates || [dateKey]
     };
@@ -90,6 +102,7 @@ function getReportForDate(dateKey) {
       timestamp: result.data.timestamp,
       regions: result.data.regions,
       summary: result.data.summary || {},
+      prev_summary: null,
       stores_count: result.data.stores_count || 0,
       available_dates: [result.data.report_date]
     };

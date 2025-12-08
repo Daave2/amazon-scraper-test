@@ -463,6 +463,100 @@
             margin-left: 8px;
         }
 
+        /* Callout Cards */
+        .callout-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border-radius: 10px;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        .callout-icon {
+            font-size: 24px;
+        }
+
+        .callout-content {
+            flex: 1;
+        }
+
+        .callout-title {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .callout-value {
+            font-size: 16px;
+            font-weight: 700;
+            margin: 2px 0;
+        }
+
+        .callout-detail {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .callout-bad {
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+            border-left: 4px solid #dc3545;
+        }
+
+        .callout-bad .callout-value {
+            color: #a71d2a;
+        }
+
+        .callout-good {
+            background: linear-gradient(135deg, #f0fff4 0%, #d4edda 100%);
+            border-left: 4px solid #28a745;
+        }
+
+        .callout-good .callout-value {
+            color: #0a7c42;
+        }
+
+        .callout-warn {
+            background: linear-gradient(135deg, #fffcf0 0%, #fff3cd 100%);
+            border-left: 4px solid #ffc107;
+        }
+
+        .callout-warn .callout-value {
+            color: #856404;
+        }
+
+        /* Trend Indicators */
+        .trend {
+            display: inline-block;
+            font-size: 11px;
+            margin-left: 4px;
+            font-weight: 500;
+        }
+
+        .trend-up {
+            color: #28a745;
+        }
+
+        .trend-down {
+            color: #dc3545;
+        }
+
+        .trend-neutral {
+            color: #6c757d;
+        }
+
+        .trend-up-bad {
+            color: #dc3545;
+        }
+
+        .trend-down-good {
+            color: #28a745;
+        }
+
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .container {
@@ -621,6 +715,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Quick Stats Callouts -->
+            <div id="callout-container" style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;"></div>
 
             <!-- Filter Bar -->
             <div class="card" style="margin-bottom: 16px;">
@@ -968,33 +1065,93 @@
 
         function renderSummary(data) {
             const summary = data.summary || {};
-            const html = `
-        <div class="summary-item">
-          <div class="value">${data.stores_count || 0}</div>
-          <div class="label">Stores</div>
-        </div>
-        <div class="summary-item">
-          <div class="value">${formatPercent(summary.avg_inf)}</div>
-          <div class="label">Avg INF</div>
-        </div>
-        <div class="summary-item">
-          <div class="value">${formatPercent(summary.avg_lates)}</div>
-          <div class="label">Avg Lates</div>
-        </div>
-        <div class="summary-item">
-          <div class="value">${summary.avg_uph ? Math.round(summary.avg_uph) : '-'}</div>
-          <div class="label">Avg UPH</div>
-        </div>
-        <div class="summary-item">
-          <div class="value">${formatCurrency(summary.total_wasted_payroll)}</div>
-          <div class="label">Wasted Payroll</div>
-        </div>
-        <div class="summary-item">
-          <div class="value">${formatCurrency(summary.total_missed_sales)}</div>
-          <div class="label">Missed Sales</div>
-        </div>
-      `;
+            const regions = data.regions || {};
+
+            // Calculate best/worst performers
+            let allStores = [];
+            for (const [regionName, managers] of Object.entries(regions)) {
+                if (regionName === 'Unknown') continue;
+                for (const [managerName, stores] of Object.entries(managers)) {
+                    for (const store of stores) {
+                        allStores.push({
+                            name: store.store,
+                            inf: store.inf_wtd ?? store.inf_y ?? 0,
+                            uph: store.uph_wtd ?? store.uph_y ?? 0
+                        });
+                    }
+                }
+            }
+
+            // Sort by INF to find worst and best
+            allStores.sort((a, b) => b.inf - a.inf);
+            const worstStore = allStores[0];
+            const bestStore = allStores[allStores.length - 1];
+            const aboveThreshold = allStores.filter(s => s.inf > 2).length;
+
+            let html = '';
+
+            // Main stats row
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + (data.stores_count || 0) + '</div>';
+            html += '<div class="label">Stores</div>';
+            html += '</div>';
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + formatPercent(summary.avg_inf) + '</div>';
+            html += '<div class="label">Avg INF</div>';
+            html += '</div>';
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + formatPercent(summary.avg_lates) + '</div>';
+            html += '<div class="label">Avg Lates</div>';
+            html += '</div>';
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + (summary.avg_uph ? Math.round(summary.avg_uph) : '-') + '</div>';
+            html += '<div class="label">Avg UPH</div>';
+            html += '</div>';
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + formatCurrency(summary.total_wasted_payroll) + '</div>';
+            html += '<div class="label">Wasted Payroll</div>';
+            html += '</div>';
+            html += '<div class="summary-item">';
+            html += '<div class="value">' + formatCurrency(summary.total_missed_sales) + '</div>';
+            html += '<div class="label">Missed Sales</div>';
+            html += '</div>';
+
             document.getElementById('summary-grid').innerHTML = html;
+
+            // Render callout cards
+            let calloutHtml = '';
+            if (worstStore) {
+                calloutHtml += '<div class="callout-card callout-bad">';
+                calloutHtml += '<div class="callout-icon">⚠️</div>';
+                calloutHtml += '<div class="callout-content">';
+                calloutHtml += '<div class="callout-title">Highest INF</div>';
+                calloutHtml += '<div class="callout-value">' + worstStore.name + '</div>';
+                calloutHtml += '<div class="callout-detail">INF: ' + formatPercent(worstStore.inf) + '</div>';
+                calloutHtml += '</div></div>';
+            }
+            if (bestStore && bestStore.name !== worstStore?.name) {
+                calloutHtml += '<div class="callout-card callout-good">';
+                calloutHtml += '<div class="callout-icon">🏆</div>';
+                calloutHtml += '<div class="callout-content">';
+                calloutHtml += '<div class="callout-title">Lowest INF</div>';
+                calloutHtml += '<div class="callout-value">' + bestStore.name + '</div>';
+                calloutHtml += '<div class="callout-detail">INF: ' + formatPercent(bestStore.inf) + '</div>';
+                calloutHtml += '</div></div>';
+            }
+            if (aboveThreshold > 0) {
+                calloutHtml += '<div class="callout-card callout-warn">';
+                calloutHtml += '<div class="callout-icon">📊</div>';
+                calloutHtml += '<div class="callout-content">';
+                calloutHtml += '<div class="callout-title">Above 2% INF</div>';
+                calloutHtml += '<div class="callout-value">' + aboveThreshold + ' stores</div>';
+                calloutHtml += '<div class="callout-detail">Need attention</div>';
+                calloutHtml += '</div></div>';
+            }
+
+            const calloutContainer = document.getElementById('callout-container');
+            if (calloutContainer) {
+                calloutContainer.innerHTML = calloutHtml;
+            }
         }
 
         function renderRegions(data) {
@@ -1004,44 +1161,35 @@
             for (const [regionName, managers] of Object.entries(regions)) {
                 if (regionName === 'Unknown') continue;
 
-                html += `<div class="region-section">`;
-                html += `<div class="region-title">${regionName} Region</div>`;
-                html += `<table>`;
-                html += `<thead><tr>
-          <th>Manager</th>
-          <th>Store</th>
-          <th>INF Y</th>
-          <th>INF WTD</th>
-          <th>Lates Y</th>
-          <th>Lates WTD</th>
-          <th>UPH Y</th>
-          <th>UPH WTD</th>
-          <th>AvC Y</th>
-          <th>AvC WTD</th>
-          <th>AvR WTD</th>
-          <th>Wasted £</th>
-          <th>Missed £</th>
-        </tr></thead>`;
-                html += '<tbody>';
+                html += '<div class="region-section">';
+                html += '<div class="region-title">' + regionName + ' Region</div>';
+                html += '<table><thead><tr>';
+                html += '<th>Manager</th><th>Store</th>';
+                html += '<th>INF Y</th><th>INF WTD</th>';
+                html += '<th>Lates Y</th><th>Lates WTD</th>';
+                html += '<th>UPH Y</th><th>UPH WTD</th>';
+                html += '<th>AvC Y</th><th>AvC WTD</th><th>AvR WTD</th>';
+                html += '<th>Wasted £</th><th>Missed £</th>';
+                html += '</tr></thead><tbody>';
 
                 for (const [managerName, stores] of Object.entries(managers)) {
                     stores.forEach((store, idx) => {
                         html += '<tr>';
                         if (idx === 0) {
-                            html += `<td class="manager-cell" rowspan="${stores.length}">${managerName}</td>`;
+                            html += '<td class="manager-cell" rowspan="' + stores.length + '">' + managerName + '</td>';
                         }
-                        html += `<td>${store.store || ''}</td>`;
-                        html += `<td class="${getMetricClass(store.inf_y, 1.5, 3, false)}">${formatPercent(store.inf_y)}</td>`;
-                        html += `<td class="${getMetricClass(store.inf_wtd, 1.5, 3, false)}">${formatPercent(store.inf_wtd)}</td>`;
-                        html += `<td class="${getMetricClass(store.lates_y, 0.5, 2, false)}">${formatPercent(store.lates_y)}</td>`;
-                        html += `<td class="${getMetricClass(store.lates_wtd, 0.5, 2, false)}">${formatPercent(store.lates_wtd)}</td>`;
-                        html += `<td class="${getMetricClass(store.uph_y, 90, 80, true)}">${store.uph_y || '-'}</td>`;
-                        html += `<td class="${getMetricClass(store.uph_wtd, 90, 80, true)}">${store.uph_wtd || '-'}</td>`;
-                        html += `<td class="${getMetricClass(store.avc_y, 95, 85, true)}">${formatPercent(store.avc_y)}</td>`;
-                        html += `<td class="${getMetricClass(store.avc_wtd, 95, 85, true)}">${formatPercent(store.avc_wtd)}</td>`;
-                        html += `<td class="${getMetricClass(store.avr_wtd, 95, 85, true)}">${formatPercent(store.avr_wtd)}</td>`;
-                        html += `<td class="currency">${formatCurrency(store.wasted_payroll)}</td>`;
-                        html += `<td class="currency">${formatCurrency(store.missed_sales)}</td>`;
+                        html += '<td>' + (store.store || '') + '</td>';
+                        html += '<td class="' + getMetricClass(store.inf_y, 1.5, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
+                        html += '<td class="' + getMetricClass(store.inf_wtd, 1.5, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
+                        html += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
+                        html += '<td class="' + getMetricClass(store.lates_wtd, 0.5, 2, false) + '">' + formatPercent(store.lates_wtd) + '</td>';
+                        html += '<td class="' + getMetricClass(store.uph_y, 90, 80, true) + '">' + (store.uph_y || '-') + '</td>';
+                        html += '<td class="' + getMetricClass(store.uph_wtd, 90, 80, true) + '">' + (store.uph_wtd || '-') + '</td>';
+                        html += '<td class="' + getMetricClass(store.avc_y, 95, 85, true) + '">' + formatPercent(store.avc_y) + '</td>';
+                        html += '<td class="' + getMetricClass(store.avc_wtd, 95, 85, true) + '">' + formatPercent(store.avc_wtd) + '</td>';
+                        html += '<td class="' + getMetricClass(store.avr_wtd, 95, 85, true) + '">' + formatPercent(store.avr_wtd) + '</td>';
+                        html += '<td class="currency">' + formatCurrency(store.wasted_payroll) + '</td>';
+                        html += '<td class="currency">' + formatCurrency(store.missed_sales) + '</td>';
                         html += '</tr>';
                     });
                 }
@@ -1069,14 +1217,14 @@
 
         function handleReportData(data) {
             if (!data.ok) {
-                document.getElementById('summary-grid').innerHTML = `<div class="error">${data.message}</div>`;
+                document.getElementById('summary-grid').innerHTML = '<div class="error">' + data.message + '</div>';
                 document.getElementById('regions-container').innerHTML = '';
                 return;
             }
 
             currentDate = data.report_date;
-            document.getElementById('report-date').innerText = `Report for: ${formatDateDisplay(data.report_date)}`;
-            document.getElementById('last-updated').innerText = `Updated: ${new Date(data.timestamp).toLocaleString()}`;
+            document.getElementById('report-date').innerText = 'Report for: ' + formatDateDisplay(data.report_date);
+            document.getElementById('last-updated').innerText = 'Updated: ' + new Date(data.timestamp).toLocaleString();
 
             if (data.available_dates) {
                 populateDatePicker(data.available_dates, currentDate);
@@ -1088,7 +1236,7 @@
         }
 
         function handleError(error) {
-            document.getElementById('summary-grid').innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            document.getElementById('summary-grid').innerHTML = '<div class="error">Error: ' + error.message + '</div>';
         }
 
         function init() {
