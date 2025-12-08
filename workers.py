@@ -73,77 +73,48 @@ async def auto_concurrency_manager(concurrency_limit_ref: dict, last_change_ref:
         await asyncio.sleep(check_interval)
 
 
-async def http_form_submitter_worker(queue: Queue, worker_id: int, form_post_url: str,
-                                     field_map: dict, log_submission_func, progress_lock,
-                                     progress: dict, metrics_lock, metrics: dict,
-                                     run_failures: list, local_timezone,
-                                     debug_mode: bool, app_logger, dry_run: bool = False):
-    """Worker that submits form data to Google Forms via HTTP POST."""
-    log_prefix = f"[HTTP-Submitter-{worker_id}]"
-    mode_str = " (Dry Run)" if dry_run else ""
-    app_logger.info(f"{log_prefix} Starting up...{mode_str}")
-    timeout = aiohttp.ClientTimeout(total=20)
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-    connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        while True:
-            form_data = None
-            try:
-                form_data = await queue.get()
-                store_name = form_data.get('store', 'Unknown')
+async def data_processor_worker(queue: Queue, worker_id: int, 
+                              log_submission_func, progress_lock,
+                              progress: dict, metrics_lock, metrics: dict,
+                              run_failures: list, local_timezone,
+                              debug_mode: bool, app_logger):
+    """Worker that processes collected data for internal reporting (Dashboard/Chat) without external submission."""
+    log_prefix = f"[Data-Processor-{worker_id}]"
+    app_logger.info(f"{log_prefix} Starting up...")
+    
+    while True:
+        form_data = None
+        try:
+            form_data = await queue.get()
+            store_name = form_data.get('store', 'Unknown')
+            
+            # Log submission internally (Critical for Dashboard & Chat)
+            # This appends to submitted_store_data_list strings which generates the report
+            await log_submission_func(form_data)
+            
+            # Update Progress
+            with progress_lock:
+                progress["current"] += 1
+                progress["lastUpdate"] = datetime.now(local_timezone).strftime("%H:%M:%S")
+            
+            # Update Metrics
+            async with metrics_lock:
+                # We don't have a submission time anymore, so just mark it as processed
+                metrics["submission_times"].append((store_name, 0.0))
                 
-                # If Dry Run, skip the POST but still log and update progress
-                if dry_run:
-                    # Log differently to indicate skip
-                    # app_logger.info(f"{log_prefix} Dry run: Skipping submission for {store_name}") 
-                    # User asked to "skip" the log line entirely? 
-                    # "When running the report, lets skip 2025-12-08... Submitted data for..."
-                    # So we should probably log something else or nothing at all?
-                    # I'll log a debug or info saying "Captured data for ..." instead
-                    # Actually, if I just log "Captured data", it might be less noise.
-                    # But sticking to "Processed {store_name}" is safe.
-                    
-                    # Update progress immediately
-                    await log_submission_func(form_data) # This appends to submitted_store_data_list which is crucial!
-                    
-                    with progress_lock:
-                        progress["current"] += 1
-                        progress["lastUpdate"] = datetime.now(local_timezone).strftime("%H:%M:%S")
-                    
-                    continue
-
-                # Map keys to Google Form entry IDs
-                payload = {}
-                for key, value in form_data.items():
-                    if key in field_map:
-                        payload[field_map[key]] = value
-                
-                submit_start = asyncio.get_event_loop().time()
-                async with session.post(form_post_url, data=payload, timeout=10) as resp:
-                    if resp.status == 200:
-                        await log_submission_func(form_data)
-                        app_logger.info(f"{log_prefix} Submitted data for {form_data.get('store', 'Unknown')}")
-                        with progress_lock:
-                            progress["current"] += 1
-                            progress["lastUpdate"] = datetime.now(local_timezone).strftime("%H:%M:%S")
-                        
-                        submit_duration = asyncio.get_event_loop().time() - submit_start
-                        async with metrics_lock:
-                            metrics["submission_times"].append((form_data.get('store', 'Unknown'), submit_duration))
-                    else:
-                        error_text = await resp.text()
-                        app_logger.error(f"{log_prefix} Submission for {store_name} failed. Status: {resp.status}. Response: {error_text[:200]}")
-                        run_failures.append(f"{store_name} (HTTP Submit Fail {resp.status})")
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                failed_store = form_data.get('store', 'Unknown') if form_data else "Unknown"
-                app_logger.error(f"{log_prefix} Unhandled exception for {failed_store}: {e}", exc_info=debug_mode)
-                run_failures.append(f"{failed_store} (Submit Exception)")
-            finally:
-                if form_data:
-                    queue.task_done()
+            # Log success
+            # app_logger.info(f"{log_prefix} Processed {store_name}") # Optional: reduce noise by commenting out
+            
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            failed_store = form_data.get('store', 'Unknown') if form_data else "Unknown"
+            app_logger.error(f"{log_prefix} Unhandled exception for {failed_store}: {e}", exc_info=debug_mode)
+            run_failures.append(f"{failed_store} (Processing Exception)")
+        finally:
+            if form_data:
+                queue.task_done()
+    
     app_logger.info(f"{log_prefix} Shut down.")
 
 

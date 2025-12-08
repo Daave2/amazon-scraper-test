@@ -23,7 +23,7 @@ from auth import check_if_login_needed, perform_login_and_otp, prime_master_sess
 from date_range import get_date_time_range_from_config, apply_date_time_range
 from webhook import (post_to_chat_webhook, post_job_summary, post_performance_highlights,
                     post_quick_actions_card, add_to_pending_chat, flush_pending_chat_entries, log_submission)
-from workers import auto_concurrency_manager, http_form_submitter_worker, process_single_store, worker_task, api_worker_task
+from workers import auto_concurrency_manager, data_processor_worker, process_single_store, worker_task, api_worker_task
 from inf_scraper import run_inf_analysis
 from report_generator import ReportGenerator
 
@@ -95,29 +95,14 @@ UPH_THRESHOLD = 80
 LATES_THRESHOLD = 3.0
 INF_THRESHOLD = 2.0
 
-DEFAULT_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScg_jnxbuJsPs4KejUaVuu-HfMQKA3vSXZkWaYh-P_lbjE56A/formResponse"
-CUSTOM_DATE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdCenFoO8cJFf8VU2-fS6TaFhwN_arTvAYDQQSsQ_aH1so09A/formResponse"
+# Form URL constants removed as part of legacy cleanup
+# DEFAULT_FORM_URL = ...
+# CUSTOM_DATE_FORM_URL = ...
 
-# Select URL based on whether date range is being used
-if config.get('use_date_range', False):
-    FORM_POST_URL = CUSTOM_DATE_FORM_URL
-    app_logger.info(f"Using CUSTOM date range form URL: {FORM_POST_URL}")
-else:
-    FORM_POST_URL = DEFAULT_FORM_URL
-    app_logger.info(f"Using DEFAULT form URL: {FORM_POST_URL}")
+# Logic for selecting FORM_POST_URL removed
 
-FIELD_MAP = {
-    'store':          'entry.117918617',
-    'orders':         'entry.128719511',
-    'units':          'entry.66444552',
-    'fulfilled':      'entry.2093280675',
-    'uph':            'entry.316694141',
-    'inf':            'entry.909185879',
-    'found':          'entry.637588300',
-    'cancelled':      'entry.1775576921',
-    'lates':          'entry.2130893076',
-    'time_available': 'entry.1823671734',
-}
+# FIELD_MAP removed as it was specific to Google Forms
+
 
 INITIAL_CONCURRENCY = config.get('initial_concurrency', 30)
 NUM_FORM_SUBMITTERS = config.get('num_form_submitters', 2)
@@ -315,19 +300,16 @@ async def process_urls():
     form_submitter_tasks = []
     api_workers = []
     
-    # HTTP Form Submitters (Separate pool)
-    # If generating report, enable dry_run for submitters to skip POST
-    run_submitters_dry = args.generate_report
-    
+    # Data Processor Workers (Replaces HTTP Form Submitter)
     for i in range(NUM_FORM_SUBMITTERS):
         w = asyncio.create_task(
-            http_form_submitter_worker(submission_queue, i+1, FORM_POST_URL, FIELD_MAP,
-                                      log_submission_wrapper, progress_lock, progress,
-                                      metrics_lock, metrics, run_failures, LOCAL_TIMEZONE,
-                                      DEBUG_MODE, app_logger, dry_run=run_submitters_dry)
+            data_processor_worker(submission_queue, i+1,
+                                  log_submission_wrapper, progress_lock, progress,
+                                  metrics_lock, metrics, run_failures, LOCAL_TIMEZONE,
+                                  DEBUG_MODE, app_logger)
         )
         form_submitter_tasks.append(w)
-        app_logger.info(f"Started HTTP Submitter {i+1} {'(Dry Run)' if run_submitters_dry else ''}")
+        app_logger.info(f"Started Data Processor {i+1}")
     
     # Start Worker Pool - use API-first workers if enabled, otherwise browser workers
     if USE_API_FIRST:
