@@ -422,28 +422,162 @@
             margin-left: auto;
         }
 
+        /* Worst performers highlighting */
+        .worst-performer {
+            background: #fff5f5 !important;
+        }
+
+        .worst-performer td:first-child::before {
+            content: '⚠️ ';
+        }
+
+        .rank-badge {
+            display: inline-block;
+            background: #dc3545;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+            font-weight: 600;
+        }
+
+        /* Store search */
+        .search-box {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            min-width: 200px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #1e3a5f;
+            box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1);
+        }
+
+        .match-count {
+            color: #666;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        /* Mobile Responsive */
         @media (max-width: 768px) {
             .container {
-                padding: 12px;
-            }
-
-            th,
-            td {
-                padding: 6px 4px;
-                font-size: 10px;
-            }
-
-            .summary-grid {
-                grid-template-columns: repeat(2, 1fr);
+                padding: 8px;
             }
 
             .header {
                 flex-direction: column;
                 text-align: center;
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .header h1 {
+                font-size: 18px;
+            }
+
+            .header-right {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
+            }
+
+            .date-picker {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+
+            .tab-nav {
+                padding: 0;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .tab-btn {
+                padding: 12px 16px;
+                font-size: 13px;
+                white-space: nowrap;
+            }
+
+            /* Filter controls stack on mobile */
+            .card-body>div[style*="display: flex"] {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 8px !important;
+            }
+
+            .search-box,
+            .inf-select,
+            select {
+                width: 100%;
+                min-width: unset;
+            }
+
+            /* Table responsiveness */
+            table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                white-space: nowrap;
+            }
+
+            th,
+            td {
+                padding: 8px 6px;
+                font-size: 11px;
+            }
+
+            /* Larger touch targets */
+            button,
+            .product-link,
+            .tab-btn {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            .summary-item .value {
+                font-size: 20px;
             }
 
             .product-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .product-card {
+                margin-bottom: 8px;
+            }
+
+            .inf-controls {
+                flex-direction: column;
+                align-items: stretch !important;
+            }
+
+            .inf-controls label {
+                margin: 0 0 4px 0 !important;
+            }
+
+            .inf-controls select {
+                width: 100%;
+            }
+        }
+
+        /* Tablet */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .summary-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .product-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -492,7 +626,8 @@
             <div class="card" style="margin-bottom: 16px;">
                 <div class="card-body"
                     style="padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-                    <span style="font-weight: 600; font-size: 14px;">🔍 Filters:</span>
+                    <input type="text" id="store-search" placeholder="🔍 Search stores..." class="search-box"
+                        oninput="applyFilters()">
                     <select id="region-filter" onchange="applyFilters()"
                         style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
                         <option value="">All Regions</option>
@@ -627,6 +762,7 @@
         let currentDate = null;
         let selectedRegion = '';
         let selectedManager = '';
+        let storeSearch = '';
 
         function populateFilters(data) {
             const regionSelect = document.getElementById('region-filter');
@@ -672,6 +808,7 @@
         function applyFilters() {
             selectedRegion = document.getElementById('region-filter').value;
             selectedManager = document.getElementById('manager-filter').value;
+            storeSearch = (document.getElementById('store-search')?.value || '').toLowerCase();
 
             if (lastReportData) {
                 renderRegionsFiltered(lastReportData);
@@ -681,8 +818,10 @@
         function clearFilters() {
             document.getElementById('region-filter').value = '';
             document.getElementById('manager-filter').value = '';
+            document.getElementById('store-search').value = '';
             selectedRegion = '';
             selectedManager = '';
+            storeSearch = '';
             if (lastReportData) {
                 renderRegionsFiltered(lastReportData);
             }
@@ -692,6 +831,26 @@
             const regions = data.regions || {};
             let html = '';
             let storeCount = 0;
+            let allStores = [];
+
+            // First pass: collect all stores with their INF data for ranking
+            for (const [regionName, managers] of Object.entries(regions)) {
+                if (regionName === 'Unknown') continue;
+                for (const [managerName, stores] of Object.entries(managers)) {
+                    for (const store of stores) {
+                        allStores.push({
+                            ...store,
+                            regionName,
+                            managerName,
+                            infValue: store.inf_wtd ?? store.inf_y ?? 0
+                        });
+                    }
+                }
+            }
+
+            // Sort by INF (worst first) and mark top 3 as worst performers
+            allStores.sort((a, b) => b.infValue - a.infValue);
+            const worstStoreNames = allStores.slice(0, 3).map(s => s.store);
 
             for (const [regionName, managers] of Object.entries(regions)) {
                 if (regionName === 'Unknown') continue;
@@ -703,42 +862,54 @@
                 for (const [managerName, stores] of Object.entries(managers)) {
                     if (selectedManager && managerName !== selectedManager) continue;
 
-                    hasVisibleStores = true;
-                    storeCount += stores.length;
+                    // Filter by store search
+                    const filteredStores = stores.filter(store => {
+                        if (!storeSearch) return true;
+                        return (store.store || '').toLowerCase().includes(storeSearch);
+                    });
 
-                    stores.forEach((store, idx) => {
+                    if (filteredStores.length === 0) continue;
+
+                    hasVisibleStores = true;
+                    storeCount += filteredStores.length;
+
+                    filteredStores.forEach((store, idx) => {
+                        const isWorst = worstStoreNames.includes(store.store);
+                        const rowClass = isWorst ? 'worst-performer' : '';
+                        const rankBadge = isWorst ? '<span class="rank-badge">Top 3 INF</span>' : '';
+
                         if (idx === 0) {
-                            regionHtml += `<tr><td class="manager-cell" rowspan="${stores.length}">${managerName}</td>`;
+                            regionHtml += '<tr class="' + rowClass + '"><td class="manager-cell" rowspan="' + filteredStores.length + '">' + managerName + '</td>';
                         } else {
-                            regionHtml += '<tr>';
+                            regionHtml += '<tr class="' + rowClass + '">';
                         }
-                        regionHtml += `<td>${store.store || ''}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.inf_y, 1.5, 3, false)}">${formatPercent(store.inf_y)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.inf_wtd, 1.5, 3, false)}">${formatPercent(store.inf_wtd)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.lates_y, 0.5, 2, false)}">${formatPercent(store.lates_y)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.lates_wtd, 0.5, 2, false)}">${formatPercent(store.lates_wtd)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.uph_y, 90, 80, true)}">${store.uph_y || '-'}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.uph_wtd, 90, 80, true)}">${store.uph_wtd || '-'}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.avc_y, 95, 85, true)}">${formatPercent(store.avc_y)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.avc_wtd, 95, 85, true)}">${formatPercent(store.avc_wtd)}</td>`;
-                        regionHtml += `<td class="${getMetricClass(store.avr_wtd, 95, 85, true)}">${formatPercent(store.avr_wtd)}</td>`;
-                        regionHtml += `<td class="currency">${formatCurrency(store.wasted_payroll)}</td>`;
-                        regionHtml += `<td class="currency">${formatCurrency(store.missed_sales)}</td>`;
+                        regionHtml += '<td>' + (store.store || '') + rankBadge + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.inf_y, 1.5, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.inf_wtd, 1.5, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.lates_wtd, 0.5, 2, false) + '">' + formatPercent(store.lates_wtd) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.uph_y, 90, 80, true) + '">' + (store.uph_y || '-') + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.uph_wtd, 90, 80, true) + '">' + (store.uph_wtd || '-') + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.avc_y, 95, 85, true) + '">' + formatPercent(store.avc_y) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.avc_wtd, 95, 85, true) + '">' + formatPercent(store.avc_wtd) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.avr_wtd, 95, 85, true) + '">' + formatPercent(store.avr_wtd) + '</td>';
+                        regionHtml += '<td class="currency">' + formatCurrency(store.wasted_payroll) + '</td>';
+                        regionHtml += '<td class="currency">' + formatCurrency(store.missed_sales) + '</td>';
                         regionHtml += '</tr>';
                     });
                 }
 
                 if (hasVisibleStores) {
-                    html += `<div class="region-section">`;
-                    html += `<div class="region-title">${regionName} Region</div>`;
-                    html += `<table><thead><tr>
-                        <th>Manager</th><th>Store</th>
-                        <th>INF Y</th><th>INF WTD</th>
-                        <th>Lates Y</th><th>Lates WTD</th>
-                        <th>UPH Y</th><th>UPH WTD</th>
-                        <th>AvC Y</th><th>AvC WTD</th><th>AvR WTD</th>
-                        <th>Wasted £</th><th>Missed £</th>
-                    </tr></thead><tbody>${regionHtml}</tbody></table></div>`;
+                    html += '<div class="region-section">';
+                    html += '<div class="region-title">' + regionName + ' Region</div>';
+                    html += '<table><thead><tr>';
+                    html += '<th>Manager</th><th>Store</th>';
+                    html += '<th>INF Y</th><th>INF WTD</th>';
+                    html += '<th>Lates Y</th><th>Lates WTD</th>';
+                    html += '<th>UPH Y</th><th>UPH WTD</th>';
+                    html += '<th>AvC Y</th><th>AvC WTD</th><th>AvR WTD</th>';
+                    html += '<th>Wasted £</th><th>Missed £</th>';
+                    html += '</tr></thead><tbody>' + regionHtml + '</tbody></table></div>';
                 }
             }
 
@@ -747,7 +918,7 @@
             }
 
             document.getElementById('regions-container').innerHTML = html;
-            document.getElementById('filter-count').innerText = `Showing ${storeCount} stores`;
+            document.getElementById('filter-count').innerText = 'Showing ' + storeCount + ' stores';
         }
 
 
