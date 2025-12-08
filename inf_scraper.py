@@ -559,7 +559,11 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
                     'location': item.get('std_location', ''),
                     'barcode': item.get('barcode', ''),
                     'image_url': item.get('image_url', ''),
-                    'discontinued': item.get('product_status') and item.get('product_status') != 'A'
+                    'discontinued': item.get('product_status') and item.get('product_status') != 'A',
+                    # Additional INF analytics fields
+                    'orders_impacted': item.get('orders_impacted', 0),
+                    'replacement_pct': item.get('replacement_percent', 0),
+                    'picking_window': item.get('picking_window', ''),
                 })
         
         # Fetch existing Gist and update inf_items section

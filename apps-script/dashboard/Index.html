@@ -234,6 +234,194 @@
             font-size: 12px;
         }
 
+        /* Tab Navigation */
+        .tab-nav {
+            background: #fff;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 0;
+            padding: 0 20px;
+        }
+
+        .tab-btn {
+            padding: 14px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: #1e3a5f;
+            background: #f8f9fa;
+        }
+
+        .tab-btn.active {
+            color: #1e3a5f;
+            border-bottom-color: #2d5a87;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* INF Product Cards */
+        .inf-controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .inf-select {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .product-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .product-image {
+            width: 100%;
+            height: 160px;
+            object-fit: contain;
+            background: white;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .product-details {
+            padding: 14px;
+        }
+
+        .product-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .product-sku {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .product-stats {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .stat-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-inf {
+            background: #f8d7da;
+            color: #a71d2a;
+        }
+
+        .badge-stock {
+            background: #d4edda;
+            color: #0a7c42;
+        }
+
+        .badge-stock.low {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-stock.out {
+            background: #f8d7da;
+            color: #a71d2a;
+        }
+
+        .badge-price {
+            background: #e9f0f7;
+            color: #1e3a5f;
+        }
+
+        .product-location {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #eee;
+        }
+
+        .product-actions {
+            padding: 10px 14px;
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
+        }
+
+        .product-link {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #1e3a5f;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .product-link:hover {
+            background: #2d5a87;
+        }
+
+        .inf-empty {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .store-inf-rate {
+            font-size: 14px;
+            color: #666;
+            margin-left: auto;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 12px;
@@ -252,6 +440,10 @@
             .header {
                 flex-direction: column;
                 text-align: center;
+            }
+
+            .product-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -273,47 +465,83 @@
         </div>
     </div>
 
-    <div class="container">
-        <!-- Summary Card -->
-        <div class="card">
-            <div class="card-header">
-                <span>Network Summary</span>
-                <span class="timestamp" id="last-updated"></span>
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('performance')">🏪 Performance</button>
+        <button class="tab-btn" onclick="switchTab('inf')">📦 INF Deep Dive</button>
+    </div>
+
+    <!-- Performance Tab -->
+    <div id="tab-performance" class="tab-content active">
+        <div class="container">
+            <!-- Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span>Network Summary</span>
+                    <span class="timestamp" id="last-updated"></span>
+                </div>
+                <div class="card-body">
+                    <div class="summary-grid" id="summary-grid">
+                        <div class="loading">Loading summary...</div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="summary-grid" id="summary-grid">
-                    <div class="loading">Loading summary...</div>
+
+            <!-- Filter Bar -->
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="card-body"
+                    style="padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                    <span style="font-weight: 600; font-size: 14px;">🔍 Filters:</span>
+                    <select id="region-filter" onchange="applyFilters()"
+                        style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
+                        <option value="">All Regions</option>
+                    </select>
+                    <select id="manager-filter" onchange="applyFilters()"
+                        style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
+                        <option value="">All Managers</option>
+                    </select>
+                    <button onclick="clearFilters()"
+                        style="padding: 6px 12px; background: #f0f2f5; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 13px;">Clear</button>
+                    <span id="filter-count" style="color: #666; font-size: 12px;"></span>
+                </div>
+            </div>
+
+            <!-- Data Tables -->
+            <div class="card">
+                <div class="card-header">Store Performance by Region</div>
+                <div class="card-body" id="regions-container">
+                    <div class="loading">Loading store data...</div>
                 </div>
             </div>
         </div>
+    </div><!-- End Performance Tab -->
 
-        <!-- Filter Bar -->
-        <div class="card" style="margin-bottom: 16px;">
-            <div class="card-body"
-                style="padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-                <span style="font-weight: 600; font-size: 14px;">🔍 Filters:</span>
-                <select id="region-filter" onchange="applyFilters()"
-                    style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
-                    <option value="">All Regions</option>
-                </select>
-                <select id="manager-filter" onchange="applyFilters()"
-                    style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
-                    <option value="">All Managers</option>
-                </select>
-                <button onclick="clearFilters()"
-                    style="padding: 6px 12px; background: #f0f2f5; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 13px;">Clear</button>
-                <span id="filter-count" style="color: #666; font-size: 12px;"></span>
+    <!-- INF Deep Dive Tab -->
+    <div id="tab-inf" class="tab-content">
+        <div class="container">
+            <div class="card">
+                <div class="card-header">
+                    <span>📦 INF Items Deep Dive</span>
+                </div>
+                <div class="card-body">
+                    <div class="inf-controls">
+                        <label style="font-weight: 600;">Date:</label>
+                        <select id="inf-date-selector" class="inf-select" onchange="loadINFData(this.value)">
+                            <option value="">Loading dates...</option>
+                        </select>
+                        <label style="font-weight: 600; margin-left: 16px;">Store:</label>
+                        <select id="inf-store-selector" class="inf-select" onchange="renderINFProducts(this.value)">
+                            <option value="">Select a store</option>
+                        </select>
+                        <span class="store-inf-rate" id="store-inf-rate"></span>
+                    </div>
+                    <div id="inf-products-container">
+                        <div class="inf-empty">Select a date and store to view INF items</div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Data Tables -->
-        <div class="card">
-            <div class="card-header">Store Performance by Region</div>
-            <div class="card-body" id="regions-container">
-                <div class="loading">Loading store data...</div>
-            </div>
-        </div>
-    </div>
+    </div><!-- End INF Tab -->
 
     <script>
         let availableDates = [];
@@ -666,6 +894,174 @@
             lastReportData = data;
             originalHandleReportData(data);
         };
+
+        // ===== INF Deep Dive Functions =====
+        let currentINFData = null;
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.includes(tabName === 'performance' ? 'Performance' : 'INF'));
+            });
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            // Load INF dates on first switch to INF tab
+            if (tabName === 'inf' && !currentINFData) {
+                loadINFDates();
+            }
+        }
+
+        function loadINFDates() {
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    const select = document.getElementById('inf-date-selector');
+                    if (result.ok && result.dates && result.dates.length > 0) {
+                        select.innerHTML = result.dates.map((d, i) =>
+                            `<option value="${d}" ${i === 0 ? 'selected' : ''}>${formatDate(d)}</option>`
+                        ).join('');
+                        // Auto-load first date
+                        loadINFData(result.dates[0]);
+                    } else {
+                        select.innerHTML = '<option value="">No INF data available</option>';
+                        document.getElementById('inf-products-container').innerHTML =
+                            '<div class="inf-empty">No INF data has been collected yet. Run an INF analysis to populate this data.</div>';
+                    }
+                })
+                .withFailureHandler(function (err) {
+                    console.error('Failed to load INF dates:', err);
+                })
+                .getINFDates();
+        }
+
+        function loadINFData(dateKey) {
+            if (!dateKey) return;
+
+            const container = document.getElementById('inf-products-container');
+            container.innerHTML = '<div class="loading">Loading INF data...</div>';
+
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    if (result.ok && result.stores) {
+                        currentINFData = result.stores;
+                        renderStoreSelector(result.stores);
+                    } else {
+                        container.innerHTML = '<div class="inf-empty">' + (result.message || 'No data available') + '</div>';
+                    }
+                })
+                .withFailureHandler(function (err) {
+                    container.innerHTML = '<div class="inf-empty">Error loading data: ' + err + '</div>';
+                })
+                .getINFItemsForDate(dateKey);
+        }
+
+        function renderStoreSelector(stores) {
+            const select = document.getElementById('inf-store-selector');
+            const storeNames = Object.keys(stores).sort();
+
+            select.innerHTML = '<option value="">Select a store (' + storeNames.length + ' stores)</option>' +
+                storeNames.map(name => {
+                    const itemCount = stores[name].items?.length || 0;
+                    return `<option value="${name}">${name} (${itemCount} items)</option>`;
+                }).join('');
+
+            document.getElementById('inf-products-container').innerHTML =
+                '<div class="inf-empty">Select a store to view INF items</div>';
+            document.getElementById('store-inf-rate').textContent = '';
+        }
+
+        function renderINFProducts(storeName) {
+            const container = document.getElementById('inf-products-container');
+            const rateSpan = document.getElementById('store-inf-rate');
+
+            if (!storeName || !currentINFData || !currentINFData[storeName]) {
+                container.innerHTML = '<div class="inf-empty">Select a store to view INF items</div>';
+                rateSpan.textContent = '';
+                return;
+            }
+
+            const storeData = currentINFData[storeName];
+            const items = storeData.items || [];
+            const infRate = storeData.inf_rate;
+
+            rateSpan.textContent = infRate ? `INF Rate: ${infRate}%` : '';
+
+            if (items.length === 0) {
+                container.innerHTML = '<div class="inf-empty">No INF items found for this store</div>';
+                return;
+            }
+
+            const cardsHtml = items.map(item => {
+                // Determine stock badge style
+                let stockBadgeClass = 'badge-stock';
+                let stockValue = item.stock ?? 'N/A';
+                if (typeof stockValue === 'number') {
+                    if (stockValue === 0) stockBadgeClass += ' out';
+                    else if (stockValue < 5) stockBadgeClass += ' low';
+                }
+
+                // Build location string
+                let locationStr = '';
+                if (item.location) {
+                    const loc = item.location;
+                    const parts = [];
+                    if (loc.aisle) parts.push('Aisle ' + loc.aisle);
+                    if (loc.bay) parts.push('Bay ' + loc.bay);
+                    if (loc.shelf) parts.push('Shelf ' + loc.shelf);
+                    locationStr = parts.join(' • ') || loc.raw || '';
+                }
+
+                // Analysis app link
+                const analysisUrl = item.sku ?
+                    `https://app.218.team/assistant/${item.sku}?locationId=${storeData.store_number || ''}` : '';
+
+                // Placeholder image (base64 encoded simple gray box)
+                const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                const imgSrc = item.image_url || placeholderImg;
+
+                return `
+                <div class="product-card">
+                    <img class="product-image" 
+                         src="${imgSrc}" 
+                         alt="${(item.name || 'Product').replace(/"/g, '&quot;')}"
+                         onerror="this.onerror=null; this.src='${placeholderImg}';" />
+                    <div class="product-details">
+                        <div class="product-name">${item.name || 'Unknown Product'}</div>
+                        <div class="product-sku">SKU: ${item.sku || 'N/A'}${item.barcode ? ` • EAN: ${item.barcode}` : ''}</div>
+                        <div class="product-stats">
+                            <span class="stat-badge badge-inf">INF: ${item.inf_count ?? 'N/A'}</span>
+                            <span class="stat-badge ${stockBadgeClass}">Stock: ${stockValue}</span>
+                            ${item.price ? `<span class="stat-badge badge-price">£${item.price.toFixed(2)}</span>` : ''}
+                        </div>
+                        ${(item.orders_impacted || item.replacement_pct || item.picking_window) ? `
+                        <div class="product-stats" style="margin-top: 6px;">
+                            ${item.orders_impacted ? `<span class="stat-badge" style="background:#e9f0f7;color:#1e3a5f;">📦 ${item.orders_impacted} orders</span>` : ''}
+                            ${item.replacement_pct ? `<span class="stat-badge" style="background:${item.replacement_pct >= 50 ? '#d4edda' : '#fff3cd'};color:${item.replacement_pct >= 50 ? '#0a7c42' : '#856404'};">🔄 ${item.replacement_pct}% replaced</span>` : ''}
+                            ${item.picking_window ? `<span class="stat-badge" style="background:#f0f2f5;color:#495057;">⏰ ${item.picking_window}</span>` : ''}
+                        </div>` : ''}
+                        ${item.location ? `<div class="product-location">📍 ${item.location}</div>` : ''}
+                        ${item.discontinued ? '<div class="product-location" style="color: #a71d2a;">⚠️ Discontinued / Not Ranged</div>' : ''}
+                    </div>
+                    ${analysisUrl ? `
+                    <div class="product-actions">
+                        <a href="${analysisUrl}" target="_blank" class="product-link">🔍 Analyze</a>
+                        ${item.barcode ? `<button onclick="navigator.clipboard.writeText('${item.barcode}');this.textContent='Copied!';setTimeout(()=>this.textContent='📋 Copy EAN',1500)" class="product-link" style="margin-left:8px;background:#6c757d;border:none;cursor:pointer;">📋 Copy EAN</button>` : ''}
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+
+            container.innerHTML = `<div class="product-grid">${cardsHtml}</div>`;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        }
 
         window.addEventListener('load', init);
     </script>
