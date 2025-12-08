@@ -402,7 +402,7 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
                     app_logger.info(f"[{store_name}] Date range applied to INF page")
                     # Wait for new API data after date range change (reduced from 2s to 1s)
                     await page.wait_for_timeout(1000)
-                else:
+                elif date_range_config and date_range_config.get('mode') != 'today':
                     app_logger.warning(f"[{store_name}] Could not apply date range to INF page, using default")
 
             # Check if we got the main API response
