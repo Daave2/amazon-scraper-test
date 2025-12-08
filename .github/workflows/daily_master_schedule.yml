@@ -1,19 +1,18 @@
-name: 2 PM INF Report
-
-# ==============================================================================
-# ─── PURPOSE ──────────────────────────────────────────────────────────────────
-# This workflow runs automatically at 2 PM to check today's INF so far
-# ==============================================================================
+name: Daily Master Schedule (Perf & INF)
 
 on:
+  # Scheduled runs at 9am, 12pm, 2pm, 5pm, 8pm (UTC/UK Winter Time)
+  schedule:
+    - cron: '0 9,12,14,17,20 * * *'
+  
   # Manual trigger
   workflow_dispatch:
   
-  # Scheduled: Run at 2 PM UK time every day
-  schedule:
-    - cron: '0 14 * * *'  # 2 PM UTC = 2 PM UK
+  # API trigger
+  repository_dispatch:
+    types:
+      - run-full-scrape
 
-# Abort an older run if a new one starts
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,9 +21,9 @@ env:
   PYTHON_VERSION: '3.11'
 
 jobs:
-  afternoon-inf:
+  daily-master-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90  # Extended timeout for combined run
 
     steps:
     - uses: actions/checkout@v4
@@ -38,27 +37,30 @@ jobs:
     - name: Install Python dependencies
       run: pip install -r requirements.txt
 
-    - name: Cache Playwright browsers
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
-
-    - name: Install Playwright browsers & deps
+    - name: Install Playwright browsers
       run: python -m playwright install --with-deps chromium
 
-    - name: Build runtime config from Secrets
+    - name: Generate Runtime Config
       env:
+        # Secrets for Login & APIs
         LOGIN_URL:       ${{ secrets.LOGIN_URL }}
         SECRET_KEY:      ${{ secrets.SECRET_KEY }}
         LOGIN_EMAIL:     ${{ secrets.LOGIN_EMAIL }}
         LOGIN_PASSWORD:  ${{ secrets.LOGIN_PASSWORD }}
         OTP_SECRET_KEY:  ${{ secrets.OTP_SECRET_KEY }}
+        
+        # Webhooks
         CHAT_WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK_URL }}
         APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+        
+        # External APIs
         MORRISONS_API_KEY: ${{ secrets.MORRISONS_API_KEY }}
         MORRISONS_BEARER_TOKEN_URL: ${{ secrets.MORRISONS_BEARER_TOKEN_URL }}
+        
+        # Dashboard Config - CRITICAL FIX
+        DASHBOARD_GIST_ID: "267134a093e5906af4aeaf1c6eb50ea1"
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        
       run: |
         cat > config.json <<JSON
         {
@@ -70,57 +72,51 @@ jobs:
           "otp_secret_key":  "${OTP_SECRET_KEY}",
           "chat_webhook_url": "${CHAT_WEBHOOK_URL}",
           "apps_script_webhook_url": "${APPS_SCRIPT_WEBHOOK_URL}",
+          
+          "dashboard_gist_id": "${DASHBOARD_GIST_ID}",
+          "gist_token": "${GIST_TOKEN}",
+          
+          "max_concurrency": 55,
           "page_timeout_ms": 90000,
           "element_wait_timeout_ms": 20000,
-          "use_date_range": false,
+          
           "morrisons_api_key": "${MORRISONS_API_KEY}",
           "morrisons_bearer_token_url": "${MORRISONS_BEARER_TOKEN_URL}",
           "enrich_stock_data": true,
+          
           "auto_concurrency": {
             "enabled": true,
             "min_concurrency": 1,
             "max_concurrency": 50,
             "cpu_upper_threshold": 90,
-            "cpu_lower_threshold": 75,
-            "mem_upper_threshold": 90,
-            "check_interval_seconds": 1,
-            "cooldown_seconds": 3
+            "cpu_lower_threshold": 75
           },
+          
           "inventory_system_url": "https://amazon-product-analysis-584939250419.us-west1.run.app/assistant/{sku}?locationId={store_number}"
         }
         JSON
 
-    - name: Download auth state from previous run
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        workflow: run-scraper.yml
-        name: auth-state
-        path: .
-        if_no_artifact_found: warn
-        search_artifacts: true
+    # 1. PERFOMANCE SCRAPE
+    - name: Run Performance Scraper
+      run: python scraper.py --date-mode today
+      env:
+        # Pass tokens just in case scripts read env vars directly
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
 
-    - name: Run INF Report (today so far)
+    # 2. INF SCRAPE (Runs after Performance)
+    - name: Run INF Scraper
+      if: success() || failure()  # Try to run INF even if Perf has minor issues, but usually we want success
+      run: python inf_scraper.py
       env:
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-      run: python inf_scraper.py
 
-
-    - name: Upload artifacts on failure or success
+    - name: Upload Artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: inf-output-afternoon-${{ github.run_id }}
+        name: daily-run-output-${{ github.run_id }}
         path: |
           output/
           app.log
           state.json
         retention-days: 7
-
-    - name: Upload auth state
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: auth-state
-        path: state.json
-        retention-days: 7
-        overwrite: true
