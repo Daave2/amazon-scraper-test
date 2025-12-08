@@ -468,7 +468,8 @@
     <!-- Tab Navigation -->
     <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('performance')">🏪 Performance</button>
-        <button class="tab-btn" onclick="switchTab('inf')">📦 INF Deep Dive</button>
+        <button class="tab-btn" onclick="switchTab('inf')">📦 Store INF</button>
+        <button class="tab-btn" onclick="switchTab('network-inf')">🌐 Network INF</button>
     </div>
 
     <!-- Performance Tab -->
@@ -543,6 +544,84 @@
         </div>
     </div><!-- End INF Tab -->
 
+    <!-- Network INF Tab -->
+    <div id="tab-network-inf" class="tab-content">
+        <div class="container">
+            <!-- Summary Stats -->
+            <div class="card">
+                <div class="card-header">
+                    <span>🌐 Network-Wide INF Summary</span>
+                    <span class="timestamp" id="network-inf-date"></span>
+                </div>
+                <div class="card-body">
+                    <div class="summary-grid" id="network-inf-summary">
+                        <div class="loading">Loading summary...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters & Sort -->
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="card-body" style="padding: 12px 20px;">
+                    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                        <input type="text" id="inf-search" placeholder="Search product or SKU..."
+                            oninput="filterNetworkINF()"
+                            style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px; min-width: 200px;">
+                        <select id="inf-store-filter" onchange="filterNetworkINF()"
+                            style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
+                            <option value="">All Stores</option>
+                        </select>
+                        <select id="inf-stock-filter" onchange="filterNetworkINF()"
+                            style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
+                            <option value="">All Stock</option>
+                            <option value="out">Out of Stock</option>
+                            <option value="low">Low Stock</option>
+                            <option value="ok">In Stock</option>
+                        </select>
+                        <select id="inf-sort" onchange="filterNetworkINF()"
+                            style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px;">
+                            <option value="inf-desc">INF: High to Low</option>
+                            <option value="inf-asc">INF: Low to High</option>
+                            <option value="stock-asc">Stock: Low to High</option>
+                            <option value="stock-desc">Stock: High to Low</option>
+                            <option value="store">Store A-Z</option>
+                            <option value="name">Product A-Z</option>
+                        </select>
+                        <button onclick="exportNetworkINF()"
+                            style="padding: 8px 12px; background: #1e3a5f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Export
+                            CSV</button>
+                        <span id="network-inf-count" style="color: #666; font-size: 12px; margin-left: auto;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card">
+                <div class="card-body" style="overflow-x: auto;">
+                    <table id="network-inf-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">Image</th>
+                                <th>Product</th>
+                                <th>Store</th>
+                                <th style="width: 70px;">INF</th>
+                                <th style="width: 80px;">Stock</th>
+                                <th style="width: 70px;">Price</th>
+                                <th>Location</th>
+                                <th style="width: 100px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="network-inf-tbody">
+                            <tr>
+                                <td colspan="8" class="loading">Click Network INF tab to load data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div><!-- End Network INF Tab -->
+
     <script>
         let availableDates = [];
         let currentDate = null;
@@ -557,8 +636,17 @@
 
             // Get unique regions (sorted)
             const regions = Object.keys(data.regions).filter(r => r !== 'Unknown').sort();
-            regionSelect.innerHTML = '<option value="">All Regions</option>' +
-                regions.map(r => `<option value="${r}">${r}</option>`).join('');
+            regionSelect.innerHTML = '';
+            let opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'All Regions';
+            regionSelect.appendChild(opt);
+            regions.forEach(r => {
+                opt = document.createElement('option');
+                opt.value = r;
+                opt.textContent = r;
+                regionSelect.appendChild(opt);
+            });
 
             // Get all managers
             let allManagers = new Set();
@@ -568,8 +656,17 @@
                 }
             }
             const sortedManagers = [...allManagers].sort();
-            managerSelect.innerHTML = '<option value="">All Managers</option>' +
-                sortedManagers.map(m => `<option value="${m}">${m}</option>`).join('');
+            managerSelect.innerHTML = '';
+            opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'All Managers';
+            managerSelect.appendChild(opt);
+            sortedManagers.forEach(m => {
+                opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                managerSelect.appendChild(opt);
+            });
         }
 
         function applyFilters() {
@@ -686,9 +783,14 @@
 
         function populateDatePicker(dates, selectedDate) {
             const selector = document.getElementById('date-selector');
-            selector.innerHTML = dates.map(d =>
-                `<option value="${d}" ${d === selectedDate ? 'selected' : ''}>${formatDateDisplay(d)}</option>`
-            ).join('');
+            selector.innerHTML = '';
+            dates.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = formatDateDisplay(d);
+                if (d === selectedDate) opt.selected = true;
+                selector.appendChild(opt);
+            });
 
             document.getElementById('history-count').innerText = dates.length + ' days';
         }
@@ -898,10 +1000,18 @@
         // ===== INF Deep Dive Functions =====
         let currentINFData = null;
 
+        let networkINFItems = [];
+        let networkINFFiltered = [];
+
         function switchTab(tabName) {
             // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.textContent.includes(tabName === 'performance' ? 'Performance' : 'INF'));
+                const text = btn.textContent.toLowerCase();
+                let isActive = false;
+                if (tabName === 'performance' && text.includes('performance')) isActive = true;
+                if (tabName === 'inf' && text.includes('store')) isActive = true;
+                if (tabName === 'network-inf' && text.includes('network')) isActive = true;
+                btn.classList.toggle('active', isActive);
             });
 
             // Update tab content
@@ -910,9 +1020,12 @@
             });
             document.getElementById('tab-' + tabName).classList.add('active');
 
-            // Load INF dates on first switch to INF tab
+            // Load INF dates on first switch to INF tabs
             if (tabName === 'inf' && !currentINFData) {
                 loadINFDates();
+            }
+            if (tabName === 'network-inf' && networkINFItems.length === 0) {
+                loadNetworkINFData();
             }
         }
 
@@ -921,15 +1034,24 @@
                 .withSuccessHandler(function (result) {
                     const select = document.getElementById('inf-date-selector');
                     if (result.ok && result.dates && result.dates.length > 0) {
-                        select.innerHTML = result.dates.map((d, i) =>
-                            `<option value="${d}" ${i === 0 ? 'selected' : ''}>${formatDate(d)}</option>`
-                        ).join('');
-                        // Auto-load first date
+                        // Use DOM methods to avoid < parsing issues
+                        select.innerHTML = '';
+                        result.dates.forEach((d, i) => {
+                            const opt = document.createElement('option');
+                            opt.value = d;
+                            opt.textContent = formatDate(d);
+                            if (i === 0) opt.selected = true;
+                            select.appendChild(opt);
+                        });
                         loadINFData(result.dates[0]);
                     } else {
-                        select.innerHTML = '<option value="">No INF data available</option>';
+                        select.innerHTML = '';
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = 'No INF data available';
+                        select.appendChild(opt);
                         document.getElementById('inf-products-container').innerHTML =
-                            '<div class="inf-empty">No INF data has been collected yet. Run an INF analysis to populate this data.</div>';
+                            'No INF data has been collected yet. Run an INF analysis to populate this data.';
                     }
                 })
                 .withFailureHandler(function (err) {
@@ -942,7 +1064,7 @@
             if (!dateKey) return;
 
             const container = document.getElementById('inf-products-container');
-            container.innerHTML = '<div class="loading">Loading INF data...</div>';
+            container.innerHTML = 'Loading INF data...';
 
             google.script.run
                 .withSuccessHandler(function (result) {
@@ -950,11 +1072,11 @@
                         currentINFData = result.stores;
                         renderStoreSelector(result.stores);
                     } else {
-                        container.innerHTML = '<div class="inf-empty">' + (result.message || 'No data available') + '</div>';
+                        container.innerHTML = result.message || 'No data available';
                     }
                 })
                 .withFailureHandler(function (err) {
-                    container.innerHTML = '<div class="inf-empty">Error loading data: ' + err + '</div>';
+                    container.innerHTML = 'Error loading data: ' + err;
                 })
                 .getINFItemsForDate(dateKey);
         }
@@ -963,14 +1085,21 @@
             const select = document.getElementById('inf-store-selector');
             const storeNames = Object.keys(stores).sort();
 
-            select.innerHTML = '<option value="">Select a store (' + storeNames.length + ' stores)</option>' +
-                storeNames.map(name => {
-                    const itemCount = stores[name].items?.length || 0;
-                    return `<option value="${name}">${name} (${itemCount} items)</option>`;
-                }).join('');
+            select.innerHTML = '';
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = 'Select a store (' + storeNames.length + ' stores)';
+            select.appendChild(defaultOpt);
 
-            document.getElementById('inf-products-container').innerHTML =
-                '<div class="inf-empty">Select a store to view INF items</div>';
+            storeNames.forEach(name => {
+                const itemCount = stores[name].items?.length || 0;
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name + ' (' + itemCount + ' items)';
+                select.appendChild(opt);
+            });
+
+            document.getElementById('inf-products-container').innerHTML = 'Select a store to view INF items';
             document.getElementById('store-inf-rate').textContent = '';
         }
 
@@ -979,7 +1108,7 @@
             const rateSpan = document.getElementById('store-inf-rate');
 
             if (!storeName || !currentINFData || !currentINFData[storeName]) {
-                container.innerHTML = '<div class="inf-empty">Select a store to view INF items</div>';
+                container.innerHTML = 'Select a store to view INF items';
                 rateSpan.textContent = '';
                 return;
             }
@@ -988,73 +1117,235 @@
             const items = storeData.items || [];
             const infRate = storeData.inf_rate;
 
-            rateSpan.textContent = infRate ? `INF Rate: ${infRate}%` : '';
+            rateSpan.textContent = infRate ? 'INF Rate: ' + infRate + '%' : '';
 
             if (items.length === 0) {
-                container.innerHTML = '<div class="inf-empty">No INF items found for this store</div>';
+                container.innerHTML = 'No INF items found for this store';
                 return;
             }
 
-            const cardsHtml = items.map(item => {
-                // Determine stock badge style
-                let stockBadgeClass = 'badge-stock';
-                let stockValue = item.stock ?? 'N/A';
-                if (typeof stockValue === 'number') {
-                    if (stockValue === 0) stockBadgeClass += ' out';
-                    else if (stockValue < 5) stockBadgeClass += ' low';
+            const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+
+            // Build cards using DOM
+            const grid = document.createElement('div');
+            grid.className = 'product-grid';
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+
+                const stockVal = item.stock ?? 'N/A';
+                let stockClass = 'badge-stock';
+                if (typeof stockVal === 'number') {
+                    if (stockVal === 0) stockClass += ' out';
+                    else if (stockVal < 5) stockClass += ' low';
                 }
 
-                // Build location string
-                let locationStr = '';
-                if (item.location) {
-                    const loc = item.location;
-                    const parts = [];
-                    if (loc.aisle) parts.push('Aisle ' + loc.aisle);
-                    if (loc.bay) parts.push('Bay ' + loc.bay);
-                    if (loc.shelf) parts.push('Shelf ' + loc.shelf);
-                    locationStr = parts.join(' • ') || loc.raw || '';
+                const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + (storeData.store_number || '') : '';
+
+                let html = '';
+                html += '<img class="product-image" src="' + (item.image_url || placeholderImg) + '" onerror="this.src=\'' + placeholderImg + '\'" />';
+                html += '<div class="product-details">';
+                html += '<div class="product-name">' + (item.name || 'Unknown Product') + '</div>';
+                html += '<div class="product-sku">SKU: ' + (item.sku || 'N/A') + (item.barcode ? ' • EAN: ' + item.barcode : '') + '</div>';
+                html += '<div class="product-stats">';
+                html += '<span class="stat-badge badge-inf">INF: ' + (item.inf_count ?? 'N/A') + '</span>';
+                html += '<span class="stat-badge ' + stockClass + '">Stock: ' + stockVal + '</span>';
+                if (item.price) html += '<span class="stat-badge badge-price">£' + item.price.toFixed(2) + '</span>';
+                html += '</div>';
+                if (item.location) html += '<div class="product-location">📍 ' + item.location + '</div>';
+                if (item.discontinued) html += '<div class="product-location" style="color: #a71d2a;">⚠️ Discontinued / Not Ranged</div>';
+                html += '</div>';
+                if (analysisUrl) {
+                    html += '<div class="product-actions">';
+                    html += '<a href="' + analysisUrl + '" target="_blank" class="product-link">🔍 Analyze</a>';
+                    html += '</div>';
                 }
 
-                // Analysis app link
-                const analysisUrl = item.sku ?
-                    `https://app.218.team/assistant/${item.sku}?locationId=${storeData.store_number || ''}` : '';
+                card.innerHTML = html;
+                grid.appendChild(card);
+            });
 
-                // Placeholder image (base64 encoded simple gray box)
-                const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
-                const imgSrc = item.image_url || placeholderImg;
+            container.innerHTML = '';
+            container.appendChild(grid);
+        }
 
-                return `
-                <div class="product-card">
-                    <img class="product-image" 
-                         src="${imgSrc}" 
-                         alt="${(item.name || 'Product').replace(/"/g, '&quot;')}"
-                         onerror="this.onerror=null; this.src='${placeholderImg}';" />
-                    <div class="product-details">
-                        <div class="product-name">${item.name || 'Unknown Product'}</div>
-                        <div class="product-sku">SKU: ${item.sku || 'N/A'}${item.barcode ? ` • EAN: ${item.barcode}` : ''}</div>
-                        <div class="product-stats">
-                            <span class="stat-badge badge-inf">INF: ${item.inf_count ?? 'N/A'}</span>
-                            <span class="stat-badge ${stockBadgeClass}">Stock: ${stockValue}</span>
-                            ${item.price ? `<span class="stat-badge badge-price">£${item.price.toFixed(2)}</span>` : ''}
-                        </div>
-                        ${(item.orders_impacted || item.replacement_pct || item.picking_window) ? `
-                        <div class="product-stats" style="margin-top: 6px;">
-                            ${item.orders_impacted ? `<span class="stat-badge" style="background:#e9f0f7;color:#1e3a5f;">📦 ${item.orders_impacted} orders</span>` : ''}
-                            ${item.replacement_pct ? `<span class="stat-badge" style="background:${item.replacement_pct >= 50 ? '#d4edda' : '#fff3cd'};color:${item.replacement_pct >= 50 ? '#0a7c42' : '#856404'};">🔄 ${item.replacement_pct}% replaced</span>` : ''}
-                            ${item.picking_window ? `<span class="stat-badge" style="background:#f0f2f5;color:#495057;">⏰ ${item.picking_window}</span>` : ''}
-                        </div>` : ''}
-                        ${item.location ? `<div class="product-location">📍 ${item.location}</div>` : ''}
-                        ${item.discontinued ? '<div class="product-location" style="color: #a71d2a;">⚠️ Discontinued / Not Ranged</div>' : ''}
-                    </div>
-                    ${analysisUrl ? `
-                    <div class="product-actions">
-                        <a href="${analysisUrl}" target="_blank" class="product-link">🔍 Analyze</a>
-                        ${item.barcode ? `<button onclick="navigator.clipboard.writeText('${item.barcode}');this.textContent='Copied!';setTimeout(()=>this.textContent='📋 Copy EAN',1500)" class="product-link" style="margin-left:8px;background:#6c757d;border:none;cursor:pointer;">📋 Copy EAN</button>` : ''}
-                    </div>` : ''}
-                </div>`;
-            }).join('');
+        // ===== Network INF Functions =====
+        function loadNetworkINFData() {
+            const tbody = document.getElementById('network-inf-tbody');
+            const summary = document.getElementById('network-inf-summary');
+            tbody.innerHTML = '<tr><td colspan="8">Loading network INF data...</td></tr>';
+            summary.innerHTML = 'Loading...';
 
-            container.innerHTML = `<div class="product-grid">${cardsHtml}</div>`;
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    if (!result.ok || !result.dates || result.dates.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8">No INF data available</td></tr>';
+                        return;
+                    }
+                    const latestDate = result.dates[0];
+                    document.getElementById('network-inf-date').textContent = formatDate(latestDate);
+
+                    google.script.run
+                        .withSuccessHandler(function (infResult) {
+                            if (!infResult.ok || !infResult.stores) {
+                                tbody.innerHTML = '<tr><td colspan="8">No data for this date</td></tr>';
+                                return;
+                            }
+                            processNetworkINFData(infResult.stores);
+                        })
+                        .withFailureHandler(function (err) {
+                            tbody.innerHTML = '<tr><td colspan="8">Error: ' + err + '</td></tr>';
+                        })
+                        .getINFItemsForDate(latestDate);
+                })
+                .withFailureHandler(function (err) {
+                    tbody.innerHTML = '<tr><td colspan="8">Error: ' + err + '</td></tr>';
+                })
+                .getINFDates();
+        }
+
+        function processNetworkINFData(stores) {
+            networkINFItems = [];
+            let totalINF = 0;
+            let outOfStockCount = 0;
+
+            for (const [storeName, storeData] of Object.entries(stores)) {
+                const items = storeData.items || [];
+                for (const item of items) {
+                    networkINFItems.push({
+                        ...item,
+                        storeName: storeName,
+                        storeNumber: storeData.store_id || ''
+                    });
+                    totalINF += item.inf_count || 0;
+                    if (item.stock === 0) outOfStockCount++;
+                }
+            }
+
+            // Populate store filter using DOM
+            const storeFilter = document.getElementById('inf-store-filter');
+            const storeNames = [...new Set(networkINFItems.map(i => i.storeName))].sort();
+            storeFilter.innerHTML = '';
+            const allOpt = document.createElement('option');
+            allOpt.value = '';
+            allOpt.textContent = 'All Stores (' + storeNames.length + ')';
+            storeFilter.appendChild(allOpt);
+            storeNames.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                storeFilter.appendChild(opt);
+            });
+
+            // Render summary
+            const avgINF = networkINFItems.length > 0 ? (totalINF / networkINFItems.length).toFixed(1) : 0;
+            const summaryEl = document.getElementById('network-inf-summary');
+            summaryEl.innerHTML = '<div class="summary-item"><div class="value">' + Object.keys(stores).length + '</div><div class="label">Stores</div></div>' +
+                '<div class="summary-item"><div class="value">' + networkINFItems.length + '</div><div class="label">Total INF Items</div></div>' +
+                '<div class="summary-item"><div class="value">' + totalINF + '</div><div class="label">Total INF Count</div></div>' +
+                '<div class="summary-item"><div class="value">' + avgINF + '</div><div class="label">Avg INF/Item</div></div>' +
+                '<div class="summary-item"><div class="value" style="color: #a71d2a;">' + outOfStockCount + '</div><div class="label">Out of Stock</div></div>';
+
+            filterNetworkINF();
+        }
+
+        function filterNetworkINF() {
+            const searchTerm = (document.getElementById('inf-search')?.value || '').toLowerCase();
+            const storeFilter = document.getElementById('inf-store-filter')?.value || '';
+            const stockFilter = document.getElementById('inf-stock-filter')?.value || '';
+            const sortValue = document.getElementById('inf-sort')?.value || 'inf-desc';
+
+            networkINFFiltered = networkINFItems.filter(item => {
+                if (searchTerm && !item.name?.toLowerCase().includes(searchTerm) && !item.sku?.includes(searchTerm)) return false;
+                if (storeFilter && item.storeName !== storeFilter) return false;
+                if (stockFilter === 'out' && item.stock !== 0) return false;
+                if (stockFilter === 'low' && (item.stock === null || item.stock === undefined || item.stock >= 5 || item.stock === 0)) return false;
+                if (stockFilter === 'ok' && (item.stock === null || item.stock === undefined || item.stock < 5)) return false;
+                return true;
+            });
+
+            networkINFFiltered.sort((a, b) => {
+                switch (sortValue) {
+                    case 'inf-desc': return (b.inf_count || 0) - (a.inf_count || 0);
+                    case 'inf-asc': return (a.inf_count || 0) - (b.inf_count || 0);
+                    case 'stock-asc': return (a.stock ?? 999) - (b.stock ?? 999);
+                    case 'stock-desc': return (b.stock ?? -1) - (a.stock ?? -1);
+                    case 'store': return (a.storeName || '').localeCompare(b.storeName || '');
+                    case 'name': return (a.name || '').localeCompare(b.name || '');
+                    default: return 0;
+                }
+            });
+
+            renderNetworkINFTable();
+        }
+
+        function renderNetworkINFTable() {
+            const tbody = document.getElementById('network-inf-tbody');
+            const countSpan = document.getElementById('network-inf-count');
+            const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+
+            countSpan.textContent = 'Showing ' + networkINFFiltered.length + ' of ' + networkINFItems.length + ' items';
+
+            if (networkINFFiltered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8">No items match filters</td></tr>';
+                return;
+            }
+
+            const displayItems = networkINFFiltered.slice(0, 100);
+            tbody.innerHTML = '';
+
+            displayItems.forEach(item => {
+                const row = document.createElement('tr');
+                const stockClass = item.stock === 0 ? 'metric-bad' : (item.stock !== null && item.stock < 5) ? 'metric-warn' : '';
+                const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + item.storeNumber : '';
+
+                row.innerHTML = '<td><img src="' + (item.image_url || placeholderImg) + '" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src=\'' + placeholderImg + '\'"></td>' +
+                    '<td><strong>' + (item.name || 'Unknown') + '</strong><br><small style="color:#666;">SKU: ' + (item.sku || 'N/A') + '</small></td>' +
+                    '<td>' + (item.storeName || '') + '</td>' +
+                    '<td class="metric-bad" style="font-weight:600;">' + (item.inf_count ?? 'N/A') + '</td>' +
+                    '<td class="' + stockClass + '">' + (item.stock ?? 'N/A') + '</td>' +
+                    '<td>' + (item.price ? '£' + item.price.toFixed(2) : '-') + '</td>' +
+                    '<td style="font-size:11px;">' + (item.location || '-') + '</td>' +
+                    '<td>' + (analysisUrl ? '<a href="' + analysisUrl + '" target="_blank" class="product-link" style="padding:4px 8px;font-size:11px;">🔍</a>' : '') + '</td>';
+                tbody.appendChild(row);
+            });
+
+            if (networkINFFiltered.length > 100) {
+                const moreRow = document.createElement('tr');
+                moreRow.innerHTML = '<td colspan="8" style="text-align:center;padding:12px;color:#666;">Showing first 100 of ' + networkINFFiltered.length + ' items. Use filters to narrow down.</td>';
+                tbody.appendChild(moreRow);
+            }
+        }
+
+        function exportNetworkINF() {
+            if (networkINFFiltered.length === 0) {
+                alert('No data to export');
+                return;
+            }
+
+            const rows = [['Store', 'SKU', 'Product', 'INF Count', 'Stock', 'Price', 'Location', 'Barcode']];
+            for (const item of networkINFFiltered) {
+                rows.push([
+                    item.storeName || '',
+                    item.sku || '',
+                    '"' + (item.name || '').replace(/"/g, '""') + '"',
+                    item.inf_count ?? '',
+                    item.stock ?? '',
+                    item.price ?? '',
+                    '"' + (item.location || '').replace(/"/g, '""') + '"',
+                    item.barcode || ''
+                ]);
+            }
+
+            const csv = rows.map(r => r.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'network_inf_export_' + new Date().toISOString().split('T')[0] + '.csv';
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         function formatDate(dateStr) {
