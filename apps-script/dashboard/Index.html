@@ -557,6 +557,36 @@
             color: #28a745;
         }
 
+        /* Sortable Columns */
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 18px !important;
+        }
+
+        th.sortable:hover {
+            background: #e2e6ea;
+        }
+
+        th.sortable::after {
+            content: '⇅';
+            position: absolute;
+            right: 4px;
+            opacity: 0.3;
+            font-size: 10px;
+        }
+
+        th.sortable.sort-asc::after {
+            content: '↑';
+            opacity: 1;
+        }
+
+        th.sortable.sort-desc::after {
+            content: '↓';
+            opacity: 1;
+        }
+
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .container {
@@ -688,6 +718,7 @@
                 <option value="">Loading dates...</option>
             </select>
             <span class="history-badge" id="history-count"></span>
+            <button class="refresh-btn" onclick="shareCurrentView()" title="Copy shareable link">🔗 Share</button>
             <button class="refresh-btn" onclick="exportCSV()" title="Download CSV">📥 Export</button>
             <button class="refresh-btn" onclick="init()">⟳ Refresh</button>
         </div>
@@ -860,6 +891,8 @@
         let selectedRegion = '';
         let selectedManager = '';
         let storeSearch = '';
+        let sortColumn = 'inf_wtd';
+        let sortDirection = 'desc';
 
         function populateFilters(data) {
             const regionSelect = document.getElementById('region-filter');
@@ -910,6 +943,7 @@
             if (lastReportData) {
                 renderRegionsFiltered(lastReportData);
             }
+            updateUrlState();
         }
 
         function clearFilters() {
@@ -922,6 +956,7 @@
             if (lastReportData) {
                 renderRegionsFiltered(lastReportData);
             }
+            updateUrlState();
         }
 
         function renderRegionsFiltered(data) {
@@ -930,11 +965,33 @@
             let storeCount = 0;
             let allStores = [];
 
-            // First pass: collect all stores with their INF data for ranking
+            // Column definitions for sorting
+            const columns = [
+                { key: 'store', label: 'Store', sortable: false },
+                { key: 'inf_y', label: 'INF Yest', sortable: true },
+                { key: 'inf_wtd', label: 'INF Week', sortable: true },
+                { key: 'lates_y', label: 'Lates Yest', sortable: true },
+                { key: 'lates_wtd', label: 'Lates Week', sortable: true },
+                { key: 'uph_y', label: 'UPH Yest', sortable: true },
+                { key: 'uph_wtd', label: 'UPH Week', sortable: true },
+                { key: 'avc_y', label: 'AvC Yest', sortable: true },
+                { key: 'avc_wtd', label: 'AvC Week', sortable: true },
+                { key: 'avr_wtd', label: 'AvR Week', sortable: true },
+                { key: 'wasted_payroll', label: 'Wasted £', sortable: true },
+                { key: 'missed_sales', label: 'Missed £', sortable: true }
+            ];
+
+            // Collect all stores
             for (const [regionName, managers] of Object.entries(regions)) {
                 if (regionName === 'Unknown') continue;
+                if (selectedRegion && regionName !== selectedRegion) continue;
+
                 for (const [managerName, stores] of Object.entries(managers)) {
+                    if (selectedManager && managerName !== selectedManager) continue;
+
                     for (const store of stores) {
+                        if (storeSearch && !(store.store || '').toLowerCase().includes(storeSearch)) continue;
+
                         allStores.push({
                             ...store,
                             regionName,
@@ -945,44 +1002,66 @@
                 }
             }
 
-            // Sort by INF (worst first) and mark top 3 as worst performers
-            allStores.sort((a, b) => b.infValue - a.infValue);
-            const worstStoreNames = allStores.slice(0, 3).map(s => s.store);
+            // Sort stores
+            allStores.sort((a, b) => {
+                const aVal = a[sortColumn] ?? 0;
+                const bVal = b[sortColumn] ?? 0;
+                if (sortDirection === 'asc') return aVal - bVal;
+                return bVal - aVal;
+            });
 
-            for (const [regionName, managers] of Object.entries(regions)) {
-                if (regionName === 'Unknown') continue;
-                if (selectedRegion && regionName !== selectedRegion) continue;
+            // Mark top 3 worst INF
+            const sortedByInf = [...allStores].sort((a, b) => b.infValue - a.infValue);
+            const worstStoreNames = sortedByInf.slice(0, 3).map(s => s.store);
 
+            storeCount = allStores.length;
+
+            // Build header with sortable columns
+            function buildHeader() {
+                let h = '<th>RM</th>';
+                columns.forEach(col => {
+                    if (col.sortable) {
+                        const sortClass = sortColumn === col.key ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
+                        h += '<th class="sortable ' + sortClass + '" onclick="sortBy(\'' + col.key + '\')">' + col.label + '</th>';
+                    } else {
+                        h += '<th>' + col.label + '</th>';
+                    }
+                });
+                return h;
+            }
+
+            // Group by region, then by manager
+            const byRegion = {};
+            allStores.forEach(store => {
+                if (!byRegion[store.regionName]) byRegion[store.regionName] = {};
+                if (!byRegion[store.regionName][store.managerName]) byRegion[store.regionName][store.managerName] = [];
+                byRegion[store.regionName][store.managerName].push(store);
+            });
+
+            for (const [regionName, managers] of Object.entries(byRegion)) {
                 let regionHtml = '';
-                let hasVisibleStores = false;
 
                 for (const [managerName, stores] of Object.entries(managers)) {
-                    if (selectedManager && managerName !== selectedManager) continue;
-
-                    // Filter by store search
-                    const filteredStores = stores.filter(store => {
-                        if (!storeSearch) return true;
-                        return (store.store || '').toLowerCase().includes(storeSearch);
+                    // Sort stores within manager group
+                    stores.sort((a, b) => {
+                        const aVal = a[sortColumn] ?? 0;
+                        const bVal = b[sortColumn] ?? 0;
+                        if (sortDirection === 'asc') return aVal - bVal;
+                        return bVal - aVal;
                     });
 
-                    if (filteredStores.length === 0) continue;
-
-                    hasVisibleStores = true;
-                    storeCount += filteredStores.length;
-
-                    filteredStores.forEach((store, idx) => {
+                    stores.forEach((store, idx) => {
                         const isWorst = worstStoreNames.includes(store.store);
                         const rowClass = isWorst ? 'worst-performer' : '';
                         const rankBadge = isWorst ? '<span class="rank-badge">Top 3 INF</span>' : '';
 
+                        regionHtml += '<tr class="' + rowClass + '">';
                         if (idx === 0) {
-                            regionHtml += '<tr class="' + rowClass + '"><td class="manager-cell" rowspan="' + filteredStores.length + '">' + managerName + '</td>';
-                        } else {
-                            regionHtml += '<tr class="' + rowClass + '">';
+                            regionHtml += '<td class="manager-cell" rowspan="' + stores.length + '">' + managerName + '</td>';
                         }
                         regionHtml += '<td>' + (store.store || '') + rankBadge + '</td>';
-                        regionHtml += '<td class="' + getMetricClass(store.inf_y, 1.5, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
-                        regionHtml += '<td class="' + getMetricClass(store.inf_wtd, 1.5, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.inf_y, 2, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
+                        regionHtml += '<td class="' + getMetricClass(store.inf_wtd, 2, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.lates_wtd, 0.5, 2, false) + '">' + formatPercent(store.lates_wtd) + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.uph_y, 90, 80, true) + '">' + (store.uph_y || '-') + '</td>';
@@ -996,18 +1075,9 @@
                     });
                 }
 
-                if (hasVisibleStores) {
-                    html += '<div class="region-section">';
-                    html += '<div class="region-title">' + regionName + ' Region</div>';
-                    html += '<table><thead><tr>';
-                    html += '<th>Manager</th><th>Store</th>';
-                    html += '<th>INF Y</th><th>INF WTD</th>';
-                    html += '<th>Lates Y</th><th>Lates WTD</th>';
-                    html += '<th>UPH Y</th><th>UPH WTD</th>';
-                    html += '<th>AvC Y</th><th>AvC WTD</th><th>AvR WTD</th>';
-                    html += '<th>Wasted £</th><th>Missed £</th>';
-                    html += '</tr></thead><tbody>' + regionHtml + '</tbody></table></div>';
-                }
+                html += '<div class="region-section">';
+                html += '<div class="region-title">' + regionName + ' Region</div>';
+                html += '<table><thead><tr>' + buildHeader() + '</tr></thead><tbody>' + regionHtml + '</tbody></table></div>';
             }
 
             if (!html) {
@@ -1016,6 +1086,18 @@
 
             document.getElementById('regions-container').innerHTML = html;
             document.getElementById('filter-count').innerText = 'Showing ' + storeCount + ' stores';
+        }
+
+        function sortBy(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            if (lastReportData) {
+                renderRegionsFiltered(lastReportData);
+            }
         }
 
 
@@ -1179,11 +1261,11 @@
                 html += '<div class="region-section">';
                 html += '<div class="region-title">' + regionName + ' Region</div>';
                 html += '<table><thead><tr>';
-                html += '<th>Manager</th><th>Store</th>';
-                html += '<th>INF Y</th><th>INF WTD</th>';
-                html += '<th>Lates Y</th><th>Lates WTD</th>';
-                html += '<th>UPH Y</th><th>UPH WTD</th>';
-                html += '<th>AvC Y</th><th>AvC WTD</th><th>AvR WTD</th>';
+                html += '<th>RM</th><th>Store</th>';
+                html += '<th>INF Yest</th><th>INF Week</th>';
+                html += '<th>Lates Yest</th><th>Lates Week</th>';
+                html += '<th>UPH Yest</th><th>UPH Week</th>';
+                html += '<th>AvC Yest</th><th>AvC Week</th><th>AvR Week</th>';
                 html += '<th>Wasted £</th><th>Missed £</th>';
                 html += '</tr></thead><tbody>';
 
@@ -1194,8 +1276,8 @@
                             html += '<td class="manager-cell" rowspan="' + stores.length + '">' + managerName + '</td>';
                         }
                         html += '<td>' + (store.store || '') + '</td>';
-                        html += '<td class="' + getMetricClass(store.inf_y, 1.5, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
-                        html += '<td class="' + getMetricClass(store.inf_wtd, 1.5, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
+                        html += '<td class="' + getMetricClass(store.inf_y, 2, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
+                        html += '<td class="' + getMetricClass(store.inf_wtd, 2, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
                         html += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
                         html += '<td class="' + getMetricClass(store.lates_wtd, 0.5, 2, false) + '">' + formatPercent(store.lates_wtd) + '</td>';
                         html += '<td class="' + getMetricClass(store.uph_y, 90, 80, true) + '">' + (store.uph_y || '-') + '</td>';
@@ -1228,6 +1310,8 @@
                 .withSuccessHandler(handleReportData)
                 .withFailureHandler(handleError)
                 .getReportForDate(dateStr);
+
+            updateUrlState();
         }
 
         function handleReportData(data) {
@@ -1254,11 +1338,88 @@
             document.getElementById('summary-grid').innerHTML = '<div class="error">Error: ' + error.message + '</div>';
         }
 
+        // URL State Management
+        let currentTab = 'performance';
+
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                date: params.get('date'),
+                tab: params.get('tab'),
+                region: params.get('region'),
+                manager: params.get('manager')
+            };
+        }
+
+        function updateUrlState() {
+            const params = new URLSearchParams();
+            if (currentDate) params.set('date', currentDate);
+            if (currentTab && currentTab !== 'performance') params.set('tab', currentTab);
+            if (selectedRegion) params.set('region', selectedRegion);
+            if (selectedManager) params.set('manager', selectedManager);
+
+            const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.history.replaceState({}, '', newUrl);
+        }
+
+        function shareCurrentView() {
+            const params = new URLSearchParams();
+            if (currentDate) params.set('date', currentDate);
+            if (currentTab && currentTab !== 'performance') params.set('tab', currentTab);
+            if (selectedRegion) params.set('region', selectedRegion);
+            if (selectedManager) params.set('manager', selectedManager);
+
+            const shareUrl = window.location.origin + window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(shareUrl).then(function () {
+                    alert('Link copied to clipboard!');
+                }).catch(function () {
+                    prompt('Copy this link:', shareUrl);
+                });
+            } else {
+                prompt('Copy this link:', shareUrl);
+            }
+        }
+
         function init() {
-            google.script.run
-                .withSuccessHandler(handleReportData)
-                .withFailureHandler(handleError)
-                .getLatestReportData();
+            // Parse URL params for deep linking
+            const urlParams = getUrlParams();
+
+            // Apply URL params to filters
+            if (urlParams.region) {
+                selectedRegion = urlParams.region;
+                const regionSelect = document.getElementById('region-filter');
+                if (regionSelect) regionSelect.value = urlParams.region;
+            }
+            if (urlParams.manager) {
+                selectedManager = urlParams.manager;
+                const managerSelect = document.getElementById('manager-filter');
+                if (managerSelect) managerSelect.value = urlParams.manager;
+            }
+            if (urlParams.tab) {
+                currentTab = urlParams.tab;
+            }
+
+            // If date specified, load that date; otherwise latest
+            if (urlParams.date) {
+                google.script.run
+                    .withSuccessHandler(function (data) {
+                        handleReportData(data);
+                        // Switch to requested tab after data loads
+                        if (urlParams.tab) switchTab(urlParams.tab);
+                    })
+                    .withFailureHandler(handleError)
+                    .getReportForDate(urlParams.date);
+            } else {
+                google.script.run
+                    .withSuccessHandler(function (data) {
+                        handleReportData(data);
+                        if (urlParams.tab) switchTab(urlParams.tab);
+                    })
+                    .withFailureHandler(handleError)
+                    .getLatestReportData();
+            }
         }
 
         // CSV Export functionality
@@ -1338,6 +1499,8 @@
         let networkINFFiltered = [];
 
         function switchTab(tabName) {
+            currentTab = tabName;
+
             // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 const text = btn.textContent.toLowerCase();
@@ -1361,6 +1524,8 @@
             if (tabName === 'network-inf' && networkINFItems.length === 0) {
                 loadNetworkINFData();
             }
+
+            updateUrlState();
         }
 
         function loadINFDates() {
