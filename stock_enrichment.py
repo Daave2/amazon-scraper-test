@@ -210,7 +210,8 @@ def _fetch_morrisons_data_for_sku(sku: str, location_id: str, api_key: str, bear
                 # Get the first price (usually the current price)
                 price_data = prices[0]
                 if isinstance(price_data, dict):
-                    price = price_data.get("price")
+                    # API returns 'regularPrice' not 'price'
+                    price = price_data.get("regularPrice")
                     if price is not None:
                         results["price"] = price
                         app_logger.debug(f"Found price for SKU {pi_sku}: £{price}")

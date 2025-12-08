@@ -743,6 +743,13 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
             # Build product list text (no images/QR codes)
             product_lines = []
             for item in items[:top_n]:
+                # Check for discontinued/inactive products first
+                alerts = []
+                if item.get('product_status') and item.get('product_status') != 'A':
+                    alerts.append("⚠️ DISCONTINUED")
+                elif item.get('commercially_active') == 'No':
+                    alerts.append("⚠️ NOT ACTIVE")
+                
                 line = f"• <b>{item['name']}</b>"
                 line += f" - <b>{item['inf']}</b> INF"
                 line += f" (SKU: {item['sku']})"
@@ -751,10 +758,16 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
                 if item.get('price') is not None:
                     line += f" - £{item['price']:.2f}"
                 
+                # Add alerts at end of main line
+                if alerts:
+                    line += f" {' '.join(alerts)}"
+                
                 product_lines.append(line)
                 
-                # Add API details if available (Phase 2)
+                # Add API details + stock + location
                 details = []
+                
+                # Amazon API metrics
                 if item.get('orders_impacted'):
                     details.append(f"Impact: {item['orders_impacted']}")
                 if item.get('picking_window'):
@@ -762,8 +775,42 @@ async def send_inf_report(store_data, network_top_10, skip_network_report=False,
                 if item.get('replacement_percent') is not None:
                     details.append(f"Repl: {item['replacement_percent']}%")
                 
+                # Stock status with freshness
+                if item.get('stock_on_hand') is not None:
+                    try:
+                        # Convert to int (comes from CSV as string)
+                        qty = int(item.get('stock_on_hand'))
+                        unit = item.get('stock_unit', 'EA')
+                        
+                        # Only show unit if not EA (99% are EA)
+                        if unit == 'EA':
+                            stock_text = f"Stock: {qty}"
+                        else:
+                            stock_text = f"Stock: {qty} {unit}"
+                        
+                        # Add freshness if available
+                        if item.get('stock_last_updated'):
+                            try:
+                                updated = datetime.fromisoformat(item['stock_last_updated'].replace('Z', '+00:00'))
+                                from datetime import timezone
+                                hours_ago = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
+                                if hours_ago < 24:
+                                    stock_text += f" ({int(hours_ago)}h ago)"
+                                elif hours_ago < 168:  # Less than 7 days
+                                    stock_text += f" ({int(hours_ago/24)}d ago)"
+                            except:
+                                pass
+                        
+                        details.append(stock_text)
+                    except (ValueError, TypeError):
+                        # Skip if stock_on_hand can't be converted to int
+                        pass
+                
+                # Location info
+                if item.get('std_location'):
+                    details.append(f"📍 {item['std_location']}")
                 if details:
-                    # Add details in grey text (removed <small> as it is not supported in Google Chat)
+                    # Add details in grey text
                     product_lines.append(f"  <font color=\"#666666\">{' | '.join(details)}</font>")
             
             # Add product list as single text paragraph

@@ -101,7 +101,16 @@ jobs:
           "num_form_submitters": 2,
           "page_timeout_ms": 90000,
           "element_wait_timeout_ms": 20000,
-          "auto_concurrency": { "enabled": true },
+          "auto_concurrency": {
+            "enabled": true,
+            "min_concurrency": 1,
+            "max_concurrency": 50,
+            "cpu_upper_threshold": 90,
+            "cpu_lower_threshold": 75,
+            "mem_upper_threshold": 90,
+            "check_interval_seconds": 1,
+            "cooldown_seconds": 3
+          },
           "use_date_range": false,
           "morrisons_api_key": "${MORRISONS_API_KEY}",
           "morrisons_bearer_token_url": "${MORRISONS_BEARER_TOKEN_URL}",
