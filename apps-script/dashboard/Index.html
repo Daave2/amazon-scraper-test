@@ -869,6 +869,11 @@
                             <option value="store">Store A-Z</option>
                             <option value="name">Product A-Z</option>
                         </select>
+                        <select id="inf-view-mode" onchange="toggleNetworkView()"
+                            style="padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 13px; font-weight: 600; color: #1e3a5f;">
+                            <option value="detailed">View: Detailed List</option>
+                            <option value="grouped">View: Grouped by Product</option>
+                        </select>
                         <button onclick="exportNetworkINF()"
                             style="padding: 8px 12px; background: #1e3a5f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Export
                             CSV</button>
@@ -1703,6 +1708,44 @@
 
             const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
 
+            // --- Generate Single Store Analysis URL ---
+            // Format: .../#/amazon/SKU:INF,SKU:INF...?locationId=STORE_ID
+            let storeAnalysisUrl = '';
+            if (storeData.store_number && items.length > 0) {
+                const skuList = items
+                    .filter(i => i.sku)
+                    .map(i => `${i.sku}:${i.inf_count || 1}`)
+                    .join(',');
+
+                if (skuList) {
+                    storeAnalysisUrl = `https://amazon-product-analysis-584939250419.us-west1.run.app/#/amazon/${skuList}?locationId=${storeData.store_number}`;
+                }
+            }
+
+            // Create Header Actions
+            const headerActions = document.createElement('div');
+            headerActions.style.marginBottom = '16px';
+            headerActions.style.display = 'flex';
+            headerActions.style.justifyContent = 'space-between';
+            headerActions.style.alignItems = 'center';
+
+            rateSpan.textContent = infRate ? 'INF Rate: ' + infRate + '%' : '';
+            headerActions.appendChild(rateSpan);
+
+            if (storeAnalysisUrl) {
+                const analyzeBtn = document.createElement('a');
+                analyzeBtn.href = storeAnalysisUrl;
+                analyzeBtn.target = '_blank';
+                analyzeBtn.className = 'store-link'; // Re-use existing style or inline
+                analyzeBtn.style.cssText = 'display:inline-block;padding:8px 16px;background:#ff9900;color:white;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;';
+                analyzeBtn.textContent = '🚀 Analyze Whole Store';
+                headerActions.appendChild(analyzeBtn);
+            }
+            // ------------------------------------------
+
+            container.innerHTML = '';
+            container.appendChild(headerActions);
+
             // Build cards using DOM
             const grid = document.createElement('div');
             grid.className = 'product-grid';
@@ -1800,6 +1843,9 @@
                 }
             }
 
+            // Compute Grouped Data
+            processNetworkGroupedData();
+
             // Populate store filter using DOM
             const storeFilter = document.getElementById('inf-store-filter');
             const storeNames = [...new Set(networkINFItems.map(i => i.storeName))].sort();
@@ -1825,6 +1871,63 @@
                 '<div class="summary-item"><div class="value" style="color: #a71d2a;">' + outOfStockCount + '</div><div class="label">Out of Stock</div></div>';
 
             filterNetworkINF();
+        }
+
+        // New Global for Grouped Data
+        let networkINFGrouped = [];
+        let networkINFGroupedFiltered = [];
+        let currentViewMode = 'detailed';
+
+        function toggleNetworkView() {
+            currentViewMode = document.getElementById('inf-view-mode').value;
+            filterNetworkINF();
+        }
+
+        function processNetworkGroupedData() {
+            const groups = {};
+
+            networkINFItems.forEach(item => {
+                if (!item.sku) return;
+
+                if (!groups[item.sku]) {
+                    groups[item.sku] = {
+                        sku: item.sku,
+                        name: item.name,
+                        image_url: item.image_url,
+                        total_inf: 0,
+                        stores: [],
+                        stock_sum: 0,
+                        price: item.price
+                    };
+                }
+
+                groups[item.sku].total_inf += (item.inf_count || 0);
+                groups[item.sku].stock_sum += (item.stock || 0);
+                groups[item.sku].stores.push({
+                    storeName: item.storeName,
+                    storeNumber: item.storeNumber,
+                    inf: item.inf_count || 0,
+                    stock: item.stock
+                });
+            });
+
+            networkINFGrouped = Object.values(groups).sort((a, b) => b.total_inf - a.total_inf);
+        }
+
+        function generateNetworkAnalysisUrl(sku, stores) {
+            // URL Format: .../#/network/SKU:StoreId=INF:StoreId=INF...
+            // e.g. /network/123456:10=5:20=2
+
+            if (!sku || !stores || stores.length === 0) return '';
+
+            const storeParts = stores
+                .filter(s => s.storeNumber) // Must have store number
+                .map(s => `${s.storeNumber}=${s.inf}`);
+
+            if (storeParts.length === 0) return '';
+
+            const payload = `${sku}:${storeParts.join(':')}`;
+            return `https://amazon-product-analysis-584939250419.us-west1.run.app/#/network/${payload}`;
         }
 
         function filterNetworkINF() {
@@ -1854,6 +1957,27 @@
                 }
             });
 
+
+
+            // Filter and Sort Grouped Data
+            if (currentViewMode === 'grouped') {
+                networkINFGroupedFiltered = networkINFGrouped.filter(group => {
+                    if (searchTerm && !group.name?.toLowerCase().includes(searchTerm) && !group.sku?.includes(searchTerm)) return false;
+                    // Store filter logic for groups: Check if ANY of the stores in the group match? 
+                    // Or just ignore store filter for grouped view? 
+                    // Let's filter groups that CONTAIN the selected store
+                    if (storeFilter && !group.stores.some(s => s.storeName === storeFilter)) return false;
+                    return true;
+                });
+
+                networkINFGroupedFiltered.sort((a, b) => {
+                    // Sort logic for groups
+                    if (sortValue === 'name') return (a.name || '').localeCompare(b.name || '');
+                    // Default to total INF desc
+                    return b.total_inf - a.total_inf;
+                });
+            }
+
             renderNetworkINFTable();
         }
 
@@ -1862,36 +1986,95 @@
             const countSpan = document.getElementById('network-inf-count');
             const placeholderImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCBmaWxsPSIjZjBmMGYwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMTAiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
 
-            countSpan.textContent = 'Showing ' + networkINFFiltered.length + ' of ' + networkINFItems.length + ' items';
+            const thRow = document.querySelector('#network-inf-table thead tr');
 
-            if (networkINFFiltered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8">No items match filters</td></tr>';
-                return;
-            }
+            if (currentViewMode === 'grouped') {
+                // Update Headers for Grouped View
+                thRow.innerHTML = `
+                    <th style="width: 60px;">Image</th>
+                    <th>Product</th>
+                    <th>Stores Affected</th>
+                    <th style="width: 70px;">Total INF</th>
+                    <th style="width: 70px;">Avg Stock</th>
+                    <th style="width: 140px;">Actions</th>
+                `;
 
-            const displayItems = networkINFFiltered.slice(0, 100);
-            tbody.innerHTML = '';
+                countSpan.textContent = 'Showing ' + networkINFGroupedFiltered.length + ' of ' + networkINFGrouped.length + ' products';
 
-            displayItems.forEach(item => {
-                const row = document.createElement('tr');
-                const stockClass = item.stock === 0 ? 'metric-bad' : (item.stock !== null && item.stock < 5) ? 'metric-warn' : '';
-                const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + item.storeNumber : '';
+                if (networkINFGroupedFiltered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">No products match filters</td></tr>';
+                    return;
+                }
 
-                row.innerHTML = '<td><img src="' + (item.image_url || placeholderImg) + '" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src=\'' + placeholderImg + '\'"></td>' +
-                    '<td><strong>' + (item.name || 'Unknown') + '</strong><br><small style="color:#666;">SKU: ' + (item.sku || 'N/A') + '</small></td>' +
-                    '<td>' + (item.storeName || '') + '</td>' +
-                    '<td class="metric-bad" style="font-weight:600;">' + (item.inf_count ?? 'N/A') + '</td>' +
-                    '<td class="' + stockClass + '">' + (item.stock ?? 'N/A') + '</td>' +
-                    '<td>' + (item.price ? '£' + item.price.toFixed(2) : '-') + '</td>' +
-                    '<td style="font-size:11px;">' + (item.location || '-') + '</td>' +
-                    '<td>' + (analysisUrl ? '<a href="' + analysisUrl + '" target="_blank" class="product-link" style="padding:4px 8px;font-size:11px;">🔍</a>' : '') + '</td>';
-                tbody.appendChild(row);
-            });
+                const displayItems = networkINFGroupedFiltered.slice(0, 100);
+                tbody.innerHTML = '';
 
-            if (networkINFFiltered.length > 100) {
-                const moreRow = document.createElement('tr');
-                moreRow.innerHTML = '<td colspan="8" style="text-align:center;padding:12px;color:#666;">Showing first 100 of ' + networkINFFiltered.length + ' items. Use filters to narrow down.</td>';
-                tbody.appendChild(moreRow);
+                displayItems.forEach(group => {
+                    const row = document.createElement('tr');
+                    const analysisUrl = generateNetworkAnalysisUrl(group.sku, group.stores);
+                    const storeCount = group.stores.length;
+
+                    // Format stores tooltip or summary
+                    const storeSummary = group.stores.slice(0, 3).map(s => s.storeName).join(', ') + (storeCount > 3 ? ` +${storeCount - 3} more` : '');
+
+                    row.innerHTML = `
+                        <td><img src="${group.image_url || placeholderImg}" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src='${placeholderImg}'"></td>
+                        <td><strong>${group.name || 'Unknown'}</strong><br><small style="color:#666;">SKU: ${group.sku || 'N/A'}</small></td>
+                        <td><div style="font-size:12px;"><strong>${storeCount}</strong> Stores</div><div style="font-size:11px;color:#666;">${storeSummary}</div></td>
+                        <td class="metric-bad" style="font-weight:600;font-size:14px;">${group.total_inf}</td>
+                        <td>${(group.stock_sum / storeCount).toFixed(1)}</td>
+                        <td>
+                            ${analysisUrl ? `<a href="${analysisUrl}" target="_blank" class="store-link" style="display:inline-block;padding:6px 12px;background:#ff9900;color:white;border-radius:4px;text-decoration:none;font-weight:bold;font-size:12px;">🚀 Analyze Network</a>` : '<span style="color:#999;font-size:12px;">No Store IDs</span>'}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+            } else {
+                // Detailed View (Standard)
+                thRow.innerHTML = `
+                    <th style="width: 60px;">Image</th>
+                    <th>Product</th>
+                    <th>Store</th>
+                    <th style="width: 70px;">INF</th>
+                    <th style="width: 80px;">Stock</th>
+                    <th style="width: 70px;">Price</th>
+                    <th>Location</th>
+                    <th style="width: 100px;">Actions</th>
+                `;
+
+                countSpan.textContent = 'Showing ' + networkINFFiltered.length + ' of ' + networkINFItems.length + ' items';
+
+                // ... (Original Rendering Logic)
+                if (networkINFFiltered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8">No items match filters</td></tr>';
+                    return;
+                }
+
+                const displayItems = networkINFFiltered.slice(0, 100);
+                tbody.innerHTML = '';
+
+                displayItems.forEach(item => {
+                    const row = document.createElement('tr');
+                    const stockClass = item.stock === 0 ? 'metric-bad' : (item.stock !== null && item.stock < 5) ? 'metric-warn' : '';
+                    const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + item.storeNumber : '';
+
+                    row.innerHTML = '<td><img src="' + (item.image_url || placeholderImg) + '" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src=\'' + placeholderImg + '\'"></td>' +
+                        '<td><strong>' + (item.name || 'Unknown') + '</strong><br><small style="color:#666;">SKU: ' + (item.sku || 'N/A') + '</small></td>' +
+                        '<td>' + (item.storeName || '') + '</td>' +
+                        '<td class="metric-bad" style="font-weight:600;">' + (item.inf_count ?? 'N/A') + '</td>' +
+                        '<td class="' + stockClass + '">' + (item.stock ?? 'N/A') + '</td>' +
+                        '<td>' + (item.price ? '£' + item.price.toFixed(2) : '-') + '</td>' +
+                        '<td style="font-size:11px;">' + (item.location || '-') + '</td>' +
+                        '<td>' + (analysisUrl ? '<a href="' + analysisUrl + '" target="_blank" class="product-link" style="padding:4px 8px;font-size:11px;">🔍</a>' : '') + '</td>';
+                    tbody.appendChild(row);
+                });
+
+                if (networkINFFiltered.length > 100) {
+                    const moreRow = document.createElement('tr');
+                    moreRow.innerHTML = '<td colspan="8" style="text-align:center;padding:12px;color:#666;">Showing first 100 of ' + networkINFFiltered.length + ' items. Use filters to narrow down.</td>';
+                    tbody.appendChild(moreRow);
+                }
             }
         }
 

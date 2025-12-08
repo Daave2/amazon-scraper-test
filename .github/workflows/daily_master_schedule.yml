@@ -82,7 +82,7 @@ jobs:
           
           "morrisons_api_key": "${MORRISONS_API_KEY}",
           "morrisons_bearer_token_url": "${MORRISONS_BEARER_TOKEN_URL}",
-          "enrich_stock_data": true,
+          "enrich_stock_data": false,
           
           "auto_concurrency": {
             "enabled": true,
