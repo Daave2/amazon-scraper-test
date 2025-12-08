@@ -68,7 +68,7 @@ if ENRICH_STOCK_DATA and MORRISONS_BEARER_TOKEN_URL:
 
 
 # Concurrency Config
-INITIAL_CONCURRENCY = config.get('initial_concurrency', 5) 
+INITIAL_CONCURRENCY = config.get('initial_concurrency', 25) 
 AUTO_CONF = config.get('auto_concurrency', {})
 AUTO_ENABLED = AUTO_CONF.get('enabled', True) 
 AUTO_MIN_CONCURRENCY = AUTO_CONF.get('min_concurrency', 1)
@@ -76,8 +76,8 @@ AUTO_MAX_CONCURRENCY = AUTO_CONF.get('max_concurrency', 20)
 CPU_UPPER_THRESHOLD = AUTO_CONF.get('cpu_upper_threshold', 90)
 CPU_LOWER_THRESHOLD = AUTO_CONF.get('cpu_lower_threshold', 65)
 MEM_UPPER_THRESHOLD = AUTO_CONF.get('mem_upper_threshold', 90)
-CHECK_INTERVAL = AUTO_CONF.get('check_interval_seconds', 5)
-COOLDOWN_SECONDS = AUTO_CONF.get('cooldown_seconds', 15)
+CHECK_INTERVAL = AUTO_CONF.get('check_interval_seconds', 3)
+COOLDOWN_SECONDS = AUTO_CONF.get('cooldown_seconds', 5)
 
 INF_PAGE_URL = "https://sellercentral.amazon.co.uk/snow-inventory/inventoryinsights/ref=xx_infr_dnav_xx"
 
