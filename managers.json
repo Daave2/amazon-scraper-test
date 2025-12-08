@@ -1,0 +1,578 @@
+{
+    "stores": {
+        "Acton": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "302"
+        },
+        "Baglan": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "96"
+        },
+        "Banbury": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "106"
+        },
+        "Basingstoke": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "345"
+        },
+        "Becontree Heath": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "296"
+        },
+        "Bedford": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "628"
+        },
+        "Binley": {
+            "region": "South",
+            "manager": "Zoe Garbett-Phillips",
+            "store_id": "69"
+        },
+        "Bristol": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "84"
+        },
+        "Bromsgrove": {
+            "region": "South",
+            "manager": "Andy Faull",
+            "store_id": "242"
+        },
+        "Bulwell": {
+            "region": "South",
+            "manager": "Zoe Garbett-Phillips",
+            "store_id": "121"
+        },
+        "Cambourne": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "118"
+        },
+        "Canning town": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "191"
+        },
+        "Canterbury": {
+            "region": "South",
+            "manager": "Jonathan Potts",
+            "store_id": "293"
+        },
+        "Canvey Island": {
+            "region": "South",
+            "manager": "Jonathan Potts",
+            "store_id": "276"
+        },
+        "Cardiff Ty glas": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "269"
+        },
+        "Chingford": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "1"
+        },
+        "Chippenham": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "348"
+        },
+        "Coalville": {
+            "region": "South",
+            "manager": "Zoe Garbett-Phillips",
+            "store_id": "54"
+        },
+        "Corby": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "232"
+        },
+        "Croydon": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "576"
+        },
+        "Derby": {
+            "region": "South",
+            "manager": "Zoe Garbett-Phillips",
+            "store_id": "78"
+        },
+        "Eastbourne": {
+            "region": "South",
+            "manager": "Matthew Hill",
+            "store_id": "546"
+        },
+        "Ebbw Vale": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "95"
+        },
+        "Exeter": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "496"
+        },
+        "Gloucester": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "575"
+        },
+        "Gravesend": {
+            "region": "South",
+            "manager": "Jonathan Potts",
+            "store_id": "298"
+        },
+        "High Wycombe": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "300"
+        },
+        "Ipswich": {
+            "region": "South",
+            "manager": "Luke Lushington",
+            "store_id": "81"
+        },
+        "Leicester": {
+            "region": "South",
+            "manager": "Zoe Garbett-Phillips",
+            "store_id": "234"
+        },
+        "Maidstone": {
+            "region": "South",
+            "manager": "Jonathan Potts",
+            "store_id": "315"
+        },
+        "MK Plaza": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "154"
+        },
+        "Newport": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "407"
+        },
+        "Northampton": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "100"
+        },
+        "Norwich": {
+            "region": "South",
+            "manager": "Luke Lushington",
+            "store_id": "115"
+        },
+        "Oxted": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "356"
+        },
+        "Peckham": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "306"
+        },
+        "Plymstock": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "333"
+        },
+        "Portsmouth": {
+            "region": "South",
+            "manager": "Matthew Hill",
+            "store_id": "522"
+        },
+        "Queensbury": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "307"
+        },
+        "Reading": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "359"
+        },
+        "Redruth": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "334"
+        },
+        "Sheldon": {
+            "region": "South",
+            "manager": "Andy Faull",
+            "store_id": "554"
+        },
+        "Stanground": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "414"
+        },
+        "Stratford": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "309"
+        },
+        "Swindon": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "634"
+        },
+        "Taunton": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "335"
+        },
+        "Totnes": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "339"
+        },
+        "Totton": {
+            "region": "South",
+            "manager": "Matthew Hill",
+            "store_id": "364"
+        },
+        "Walsall Bescot": {
+            "region": "South",
+            "manager": "Andy Faull",
+            "store_id": "63"
+        },
+        "Warminster": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "340"
+        },
+        "Watford": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "586"
+        },
+        "Welling": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "447"
+        },
+        "Weston Super Mare": {
+            "region": "South",
+            "manager": "Karl Money",
+            "store_id": "341"
+        },
+        "Weybridge": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "404"
+        },
+        "Welwyn Garden City": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "319"
+        },
+        "Wisbech": {
+            "region": "South",
+            "manager": "Luke Lushington",
+            "store_id": "511"
+        },
+        "Witham": {
+            "region": "South",
+            "manager": "Luke Lushington",
+            "store_id": "290"
+        },
+        "Woking": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "367"
+        },
+        "Worthing": {
+            "region": "South",
+            "manager": "Matthew Hill",
+            "store_id": "641"
+        },
+        "Aberdeen": {
+            "region": "North",
+            "manager": "Lynsey Selbie",
+            "store_id": "160"
+        },
+        "Anlaby": {
+            "region": "North",
+            "manager": "Chris Graham",
+            "store_id": "107"
+        },
+        "Anniesland": {
+            "region": "North",
+            "manager": "Lynsey Selbie",
+            "store_id": "179"
+        },
+        "Belle Vale": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "97"
+        },
+        "Boroughbridge": {
+            "region": "North",
+            "manager": "Darren Monks",
+            "store_id": "108"
+        },
+        "Bishop Auckland": {
+            "region": "North",
+            "manager": "Richard Thornton",
+            "store_id": "40"
+        },
+        "Byker": {
+            "region": "North",
+            "manager": "Richard Thornton",
+            "store_id": "91"
+        },
+        "Cardonald": {
+            "region": "North",
+            "manager": "Iain McCallum",
+            "store_id": "136"
+        },
+        "Catcliffe": {
+            "region": "North",
+            "manager": "Alison Reed",
+            "store_id": "29"
+        },
+        "Cleethorpes": {
+            "region": "North",
+            "manager": "Chris Graham",
+            "store_id": "75"
+        },
+        "Connah's Quay": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "440"
+        },
+        "Dundee": {
+            "region": "North",
+            "manager": "Lynsey Selbie",
+            "store_id": "145"
+        },
+        "Eccles": {
+            "region": "North",
+            "manager": "Sarah Ford",
+            "store_id": "28"
+        },
+        "Glenrothes": {
+            "region": "North",
+            "manager": "Lynsey Selbie",
+            "store_id": "184"
+        },
+        "Gyle": {
+            "region": "North",
+            "manager": "Carolyn Gibson",
+            "store_id": "177"
+        },
+        "Halifax": {
+            "region": "North",
+            "manager": "Alison Reed",
+            "store_id": "475"
+        },
+        "Hunslet": {
+            "region": "North",
+            "manager": "Darren Monks",
+            "store_id": "15"
+        },
+        "Lincoln": {
+            "region": "North",
+            "manager": "Francis Quayson",
+            "store_id": "62"
+        },
+        "Middlesbrough": {
+            "region": "North",
+            "manager": "Richard Thornton",
+            "store_id": "128"
+        },
+        "Newark": {
+            "region": "North",
+            "manager": "Francis Quayson",
+            "store_id": "48"
+        },
+        "Preston": {
+            "region": "Unknown",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "41"
+        },
+        "Reddish": {
+            "region": "North",
+            "manager": "Sarah Ford",
+            "store_id": "216"
+        },
+        "Rhyl": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "129"
+        },
+        "St Helens": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "21"
+        },
+        "Staveley": {
+            "region": "North",
+            "manager": "Alison Reed",
+            "store_id": "27"
+        },
+        "Stevenston": {
+            "region": "North",
+            "manager": "Iain McCallum",
+            "store_id": "196"
+        },
+        "Stirling": {
+            "region": "North",
+            "manager": "Lynsey Selbie",
+            "store_id": "197"
+        },
+        "Stoke": {
+            "region": "North",
+            "manager": "Alison Reed",
+            "store_id": "50"
+        },
+        "Thornbury": {
+            "region": "North",
+            "manager": "Darren Monks",
+            "store_id": "8"
+        },
+        "Thornton Cleveleys": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "218"
+        },
+        "Wellington": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "49"
+        },
+        "Winsford": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "77"
+        },
+        "Wrexham": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "417"
+        },
+        "York": {
+            "region": "North",
+            "manager": "Chris Graham",
+            "store_id": "155"
+        },
+        "Oldham": {
+            "region": "North",
+            "manager": "Unassigned",
+            "store_id": ""
+        },
+        "Nelson": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "104"
+        },
+        "Gorleston": {
+            "region": "South",
+            "manager": "Luke Lushington",
+            "store_id": "439"
+        },
+        "Harrow": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "549"
+        },
+        "Verwood": {
+            "region": "South",
+            "manager": "Matthew Hill",
+            "store_id": "640"
+        },
+        "Jarrow": {
+            "region": "Unknown",
+            "manager": "Richard Thornton",
+            "store_id": "88"
+        },
+        "Carterton": {
+            "region": "Unknown",
+            "manager": "Karl Money",
+            "store_id": "672"
+        },
+        "Kirkstall": {
+            "region": "Unknown",
+            "manager": "Darren Monks",
+            "store_id": "89"
+        },
+        "Baglan Moor": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "96"
+        },
+        "Canning Town": {
+            "region": "South",
+            "manager": "Sarah Carlucci",
+            "store_id": "191"
+        },
+        "Cardiff": {
+            "region": "South",
+            "manager": "Cathryn Allen",
+            "store_id": "269"
+        },
+        "Connahs Quay": {
+            "region": "North",
+            "manager": "Michael Sutton",
+            "store_id": "440"
+        },
+        "Hull": {
+            "region": "North",
+            "manager": "Chris Graham",
+            "store_id": "107"
+        },
+        "Milton Keynes": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "154"
+        },
+        "Oxford": {
+            "region": "South",
+            "manager": "Bonnie Ling",
+            "store_id": "356"
+        },
+        "Peterborough": {
+            "region": "South",
+            "manager": "Francis Quayson",
+            "store_id": "414"
+        },
+        "Plymouth": {
+            "region": "South",
+            "manager": "James McCarthy",
+            "store_id": "333"
+        },
+        "Sheffield": {
+            "region": "North",
+            "manager": "Alison Reed",
+            "store_id": "29"
+        },
+        "St. Helens": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "21"
+        },
+        "Walsall": {
+            "region": "South",
+            "manager": "Andy Faull",
+            "store_id": "63"
+        },
+        "Thornton-Cleveleys": {
+            "region": "North",
+            "manager": "Darren Travers-Spencer",
+            "store_id": "218"
+        }
+    },
+    "settings": {
+        "hourly_rate": 11.0,
+        "avg_item_value": 3.5
+    }
+}

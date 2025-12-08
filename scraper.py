@@ -25,6 +25,7 @@ from webhook import (post_to_chat_webhook, post_job_summary, post_performance_hi
                     post_quick_actions_card, add_to_pending_chat, flush_pending_chat_entries, log_submission)
 from workers import auto_concurrency_manager, http_form_submitter_worker, process_single_store, worker_task, api_worker_task
 from inf_scraper import run_inf_analysis
+from report_generator import ReportGenerator
 
 #######################################################################
 #                             APP SETUP & LOGGING
@@ -49,6 +50,7 @@ except json.JSONDecodeError:
 # --- CLI Argument Parsing ---
 parser = argparse.ArgumentParser(description='Amazon Seller Central Scraper')
 parser.add_argument('--date-mode', choices=['today', 'yesterday', 'last_7_days', 'last_30_days', 'relative', 'custom'], help='Date range mode')
+parser.add_argument("--generate-report", action="store_true", help="Generate HTML daily report from collected data")
 parser.add_argument('--start-date', help='Start date (MM/DD/YYYY)')
 parser.add_argument('--end-date', help='End date (MM/DD/YYYY)')
 parser.add_argument('--start-time', help='Start time (e.g., "12:00 AM")')
@@ -309,21 +311,28 @@ async def process_urls():
             concurrency_condition, app_logger
         ))
 
-    # Start Form Submitters
-    app_logger.info(f"Starting {NUM_FORM_SUBMITTERS} HTTP form submitter worker(s).")
-    form_submitter_tasks = [
-        asyncio.create_task(http_form_submitter_worker(
-            submission_queue, i + 1, FORM_POST_URL, FIELD_MAP, log_submission_wrapper,
-            progress_lock, progress, metrics_lock, metrics, run_failures, LOCAL_TIMEZONE,
-            DEBUG_MODE, app_logger
-        ))
-        for i in range(NUM_FORM_SUBMITTERS)
-    ]
+    # Create Worker Lists
+    form_submitter_tasks = []
+    api_workers = []
+    
+    # HTTP Form Submitters (Separate pool)
+    # If generating report, enable dry_run for submitters to skip POST
+    run_submitters_dry = args.generate_report
+    
+    for i in range(NUM_FORM_SUBMITTERS):
+        w = asyncio.create_task(
+            http_form_submitter_worker(submission_queue, i+1, FORM_POST_URL, FIELD_MAP,
+                                      log_submission_wrapper, progress_lock, progress,
+                                      metrics_lock, metrics, run_failures, LOCAL_TIMEZONE,
+                                      DEBUG_MODE, app_logger, dry_run=run_submitters_dry)
+        )
+        form_submitter_tasks.append(w)
+        app_logger.info(f"Started HTTP Submitter {i+1} {'(Dry Run)' if run_submitters_dry else ''}")
     
     # Start Worker Pool - use API-first workers if enabled, otherwise browser workers
     if USE_API_FIRST:
         app_logger.info(f"Spinning up {pool_size} API-first workers (optimized mode)...")
-        workers = [
+        api_workers = [
             asyncio.create_task(api_worker_task(
                 i+1, browser, storage_template, job_queue, submission_queue, PAGE_TIMEOUT, ACTION_TIMEOUT,
                 active_workers_ref, concurrency_limit_ref, concurrency_condition, get_date_range, app_logger
@@ -332,7 +341,7 @@ async def process_urls():
         ]
     else:
         app_logger.info(f"Spinning up {pool_size} browser workers (legacy mode)...")
-        workers = [
+        api_workers = [
             asyncio.create_task(worker_task(
                 i+1, browser, storage_template, job_queue, submission_queue, PAGE_TIMEOUT, ACTION_TIMEOUT,
                 process_store_wrapper, active_workers_ref, concurrency_limit_ref,
@@ -341,8 +350,8 @@ async def process_urls():
             for i in range(pool_size)
         ]
     
-    # Wait for all jobs to be processed
-    await asyncio.gather(*workers)
+    # Wait for all API/scraping workers to finish
+    await asyncio.gather(*api_workers)
     
     app_logger.info("All workers finished. Waiting for submission queue to empty...")
     await submission_queue.join()
@@ -365,58 +374,70 @@ async def process_urls():
                           APPS_SCRIPT_URL)
     
     # Send Performance Highlights & Trigger INF Deep Dive
+    # Send Performance Highlights & Trigger INF Deep Dive
     async with submitted_data_lock:
         if submitted_store_data:
             # 1. Send Performance Highlights
             await post_performance_highlights(submitted_store_data, PERFORMANCE_WEBHOOK_URL, sanitize_wrapper,
                                              LOCAL_TIMEZONE, DEBUG_MODE, app_logger, APPS_SCRIPT_URL)
-            
-            # 2. Identify Bottom 5 INF Stores for Deep Dive
-            app_logger.info("Identifying bottom 5 INF stores for deep dive analysis...")
-            try:
-                # Create a lookup for full store details
-                store_lookup = {s['store_name']: s for s in urls_data}
-                
-                # Parse INF and sort
-                def parse_inf(item):
-                    try:
-                        return float(item.get('inf', '0').replace('%', '').strip())
-                    except:
-                        return -1.0
 
-                # Filter for stores that actually have data and exist in lookup
-                # Also exclude stores with 0 orders if desired, but for INF, high INF on low orders is still bad.
-                valid_stores = [s for s in submitted_store_data if s.get('store') in store_lookup]
-                
-                # Sort by INF descending (Higher INF is worse)
-                sorted_by_inf = sorted(valid_stores, key=parse_inf, reverse=True)
-                
-                # Take top 10 or all based on mode
-                if args.inf_mode == 'all':
-                    target_stores_inf_list = sorted_by_inf
-                    app_logger.info(f"INF Mode: ALL. Targeting {len(target_stores_inf_list)} stores.")
-                else:
-                    target_stores_inf_list = sorted_by_inf[:10]
-                    app_logger.info(f"INF Mode: Top 10. Targeting {len(target_stores_inf_list)} stores.")
-                
-                target_stores_for_inf = []
-                for s in target_stores_inf_list:
-                    full_details = store_lookup.get(s['store'])
-                    if full_details:
-                        # Create a copy to avoid modifying the original urls_data
-                        store_with_inf = full_details.copy()
-                        store_with_inf['inf_rate'] = s.get('inf', 'N/A')
-                        target_stores_for_inf.append(store_with_inf)
-                
-                if target_stores_for_inf:
-                    app_logger.info(f"Triggering INF analysis for {len(target_stores_for_inf)} stores: {[s['store_name'] for s in target_stores_for_inf]}")
-                    # Run INF analysis using the existing browser
-                    await run_inf_analysis(target_stores_for_inf, browser, config)
-                else:
-                    app_logger.info("No stores found for INF analysis.")
+            # 2. Generate Daily Report
+            if args.generate_report:
+                try:
+                    app_logger.info("Generating Daily Update Report...")
+                    gen = ReportGenerator()
+                    processed_data = gen.process_data(submitted_store_data)
+                    report_path = gen.save_report(processed_data)
+                    app_logger.info(f"Report generated successfully: {report_path}")
+                except Exception as e:
+                    app_logger.error(f"Failed to generate report: {e}")
+            
+            # 3. Identify Bottom 5 INF Stores for Deep Dive (Always run if data present)
+            if True:
+                app_logger.info("Identifying bottom 5 INF stores for deep dive analysis...")
+                try:
+                    # Create a lookup for full store details
+                    store_lookup = {s['store_name']: s for s in urls_data}
                     
-            except Exception as e:
-                app_logger.error(f"Failed to run INF analysis: {e}", exc_info=True)
+                    # Parse INF and sort
+                    def parse_inf(item):
+                        try:
+                            return float(item.get('inf', '0').replace('%', '').strip())
+                        except:
+                            return -1.0
+
+                    # Filter for stores that actually have data and exist in lookup
+                    valid_stores = [s for s in submitted_store_data if s.get('store') in store_lookup]
+                    
+                    # Sort by INF descending (Higher INF is worse)
+                    sorted_by_inf = sorted(valid_stores, key=parse_inf, reverse=True)
+                    
+                    # Take top 10 or all based on mode
+                    if args.inf_mode == 'all':
+                        target_stores_inf_list = sorted_by_inf
+                        app_logger.info(f"INF Mode: ALL. Targeting {len(target_stores_inf_list)} stores.")
+                    else:
+                        target_stores_inf_list = sorted_by_inf[:10]
+                        app_logger.info(f"INF Mode: Top 10. Targeting {len(target_stores_inf_list)} stores.")
+                    
+                    target_stores_for_inf = []
+                    for s in target_stores_inf_list:
+                        full_details = store_lookup.get(s['store'])
+                        if full_details:
+                            # Create a copy to avoid modifying the original urls_data
+                            store_with_inf = full_details.copy()
+                            store_with_inf['inf_rate'] = s.get('inf', 'N/A')
+                            target_stores_for_inf.append(store_with_inf)
+                    
+                    if target_stores_for_inf:
+                        app_logger.info(f"Triggering INF analysis for {len(target_stores_for_inf)} stores: {[s['store_name'] for s in target_stores_for_inf]}")
+                        # Run INF analysis using the existing browser
+                        await run_inf_analysis(target_stores_for_inf, browser, config)
+                    else:
+                        app_logger.info("No stores found for INF analysis.")
+                        
+                except Exception as e:
+                    app_logger.error(f"Failed to run INF analysis: {e}", exc_info=True)
 
             submitted_store_data.clear()
 

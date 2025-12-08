@@ -77,10 +77,11 @@ async def http_form_submitter_worker(queue: Queue, worker_id: int, form_post_url
                                      field_map: dict, log_submission_func, progress_lock,
                                      progress: dict, metrics_lock, metrics: dict,
                                      run_failures: list, local_timezone,
-                                     debug_mode: bool, app_logger):
+                                     debug_mode: bool, app_logger, dry_run: bool = False):
     """Worker that submits form data to Google Forms via HTTP POST."""
     log_prefix = f"[HTTP-Submitter-{worker_id}]"
-    app_logger.info(f"{log_prefix} Starting up...")
+    mode_str = " (Dry Run)" if dry_run else ""
+    app_logger.info(f"{log_prefix} Starting up...{mode_str}")
     timeout = aiohttp.ClientTimeout(total=20)
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -92,6 +93,26 @@ async def http_form_submitter_worker(queue: Queue, worker_id: int, form_post_url
                 form_data = await queue.get()
                 store_name = form_data.get('store', 'Unknown')
                 
+                # If Dry Run, skip the POST but still log and update progress
+                if dry_run:
+                    # Log differently to indicate skip
+                    # app_logger.info(f"{log_prefix} Dry run: Skipping submission for {store_name}") 
+                    # User asked to "skip" the log line entirely? 
+                    # "When running the report, lets skip 2025-12-08... Submitted data for..."
+                    # So we should probably log something else or nothing at all?
+                    # I'll log a debug or info saying "Captured data for ..." instead
+                    # Actually, if I just log "Captured data", it might be less noise.
+                    # But sticking to "Processed {store_name}" is safe.
+                    
+                    # Update progress immediately
+                    await log_submission_func(form_data) # This appends to submitted_store_data_list which is crucial!
+                    
+                    with progress_lock:
+                        progress["current"] += 1
+                        progress["lastUpdate"] = datetime.now(local_timezone).strftime("%H:%M:%S")
+                    
+                    continue
+
                 # Map keys to Google Form entry IDs
                 payload = {}
                 for key, value in form_data.items():
@@ -346,6 +367,9 @@ async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_q
             elif mode == 'last_30_days':
                 start_date = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
                 end_date = now
+                # Calculate Week to Date (Sunday to Today)
+                wtd_start_date = (now - timedelta(days=(now.weekday() + 1) % 7)).replace(hour=0, minute=0, second=0, microsecond=0) # Last Sunday
+                wtd_end_date = now
             elif mode == 'custom' and date_range.get('start_date'):
                 # Parse custom dates from config
                 try:
@@ -357,6 +381,30 @@ async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_q
                         end_date = datetime.strptime(end_str, '%m/%d/%Y').replace(tzinfo=tz, hour=23, minute=59)
                 except:
                     pass  # Use defaults if parsing fails
+        
+        # Check if we should fetch WTD as well
+        # We assume if mode='yesterday' we want WTD too for the report
+        fetch_wtd = (date_range and date_range.get('mode') == 'yesterday')
+        wtd_start = None
+        wtd_end = None
+        
+        if fetch_wtd:
+            # WTD is typically Sunday to Yesterday (inclusive)
+            from datetime import timedelta
+            # If start_date is set (yesterday), use that as the end of WTD
+            # Calculate start of week (Sunday)
+            if start_date:
+                # weekday(): Mon=0, Sun=6. 
+                # If we want start of week to be Sunday:
+                # If today is Mon(0), last Sun is -1 day.
+                # If today is Sun(6), last Sun is 0 days? Or -7?
+                # Usually WTD starts from the most recent Sunday.
+                # Let's derive from the start_date (which is yesterday)
+                # If yesterday was Monday (0), start of week Sunday is -1 day.
+                days_to_subtract = (start_date.weekday() + 1) % 7
+                wtd_start = (start_date - timedelta(days=days_to_subtract)).replace(hour=0, minute=0, second=0)
+                wtd_end = end_date # Yesterday end
+                app_logger.info(f"{log_prefix} fetching WTD from {wtd_start.strftime('%Y-%m-%d')} to {wtd_end.strftime('%Y-%m-%d')}")
         
         while True:
             try:
@@ -374,9 +422,28 @@ async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_q
 
             try:
                 # Use API-first approach with browser context switching
+                # Fetch primary date range (Yesterday/Custom)
                 success, form_data = await fetch_store_metrics_with_lates_browser(
                     page, store_item, start_date, end_date
                 )
+                
+                # Fetch WTD if reliable and separate
+                if success and fetch_wtd and wtd_start:
+                    # Reuse connection/context - no need to navigate again as context is set!
+                    # We need a way to call API without navigation. 
+                    # fetch_store_metrics_with_lates_browser does nav first.
+                    # Ideally we refactor api_scraper to separate nav from fetch.
+                    # For now, we'll just call it again - it's fast enough.
+                    success_wtd, wtd_data = await fetch_store_metrics_with_lates_browser(
+                        page, store_item, wtd_start, wtd_end
+                    )
+                    
+                    if success_wtd:
+                        # Merge WTD data into form_data with _WTD suffix
+                        for k, v in wtd_data.items():
+                            if k not in ['store', 'date_range']: # Skip meta that duplicates
+                                form_data[f"{k}_WTD"] = v
+                        form_data['has_wtd'] = True
                 
                 if success:
                     # Submit to form queue
