@@ -31,13 +31,18 @@ class ReportGenerator:
             self.store_map = {}
             self.settings = {'hourly_rate': 11.00, 'avg_item_value': 3.50}
     
-    def load_confirmed_hours(self, headcount_csv=None):
-        """Load confirmed hours from CSV file."""
+    def load_confirmed_hours(self, headcount_csv=None, target_date=None):
+        """Load confirmed hours from CSV file.
+        
+        Args:
+            headcount_csv: Optional path to specific CSV file
+            target_date: Optional date string (YYYY-MM-DD) to select correct week's CSV
+        """
         self.confirmed_hours = {}
         
         # Find the CSV if not specified
         if headcount_csv is None:
-            headcount_csv = find_headcount_csv('.')
+            headcount_csv = find_headcount_csv('.', target_date=target_date)
         
         if headcount_csv:
             self.confirmed_hours = parse_confirmed_hours_csv(headcount_csv)
@@ -54,6 +59,10 @@ class ReportGenerator:
             report_date = datetime.now() - timedelta(days=1)
         elif isinstance(report_date, str):
             report_date = datetime.strptime(report_date, '%Y-%m-%d')
+        
+        # Reload confirmed hours with correct target date for the right week's CSV
+        target_date_str = report_date.strftime('%Y-%m-%d')
+        self.load_confirmed_hours(target_date=target_date_str)
         
         # Get day of week for confirmed hours lookup (0=Monday, 6=Sunday)
         day_of_week = report_date.weekday()
@@ -487,7 +496,15 @@ class ReportGenerator:
             print(f"⚠️ Dashboard push error: {e}")
             return False
 
-    def save_report(self, report_data, push_dashboard=True, dashboard_url=None):
+    def save_report(self, report_data, push_dashboard=True, dashboard_url=None, report_date=None):
+        """Save report to HTML file and optionally push to dashboard.
+        
+        Args:
+            report_data: Processed report data (regions dict)
+            push_dashboard: Whether to push to Gist dashboard
+            dashboard_url: Optional webhook URL (deprecated)
+            report_date: Date string (YYYY-MM-DD) for historical data storage
+        """
         html = self.generate_html(report_data)
         filename = f"{self.output_dir}/daily_update_{datetime.now().strftime('%Y%m%d')}.html"
         with open(filename, 'w') as f:
@@ -496,7 +513,7 @@ class ReportGenerator:
         
         # Push to dashboard if configured
         if push_dashboard:
-            self.push_to_dashboard(report_data, dashboard_url)
+            self.push_to_dashboard(report_data, dashboard_url, report_date=report_date)
         
         return filename
 

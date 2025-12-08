@@ -1,0 +1,164 @@
+=== Populating Dashboard History ===
+Started: Mon Dec  8 18:36:51 GMT 2025
+
+--- Processing 2025-12-07 (1 days ago) ---
+Started: 18:36:51
+2025-12-08 18:38:30,250 INFO Playwright stopped.
+2025-12-08 18:38:30,250 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:38:30
+Waiting 30s before next run...
+
+--- Processing 2025-12-06 (2 days ago) ---
+Started: 18:39:00
+2025-12-08 18:40:33,421 INFO Playwright stopped.
+2025-12-08 18:40:33,421 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:40:33
+Waiting 30s before next run...
+
+--- Processing 2025-12-05 (3 days ago) ---
+Started: 18:41:03
+2025-12-08 18:42:19,757 INFO Playwright stopped.
+2025-12-08 18:42:19,757 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:42:19
+Waiting 30s before next run...
+
+--- Processing 2025-12-04 (4 days ago) ---
+Started: 18:42:49
+2025-12-08 18:44:00,635 INFO Playwright stopped.
+2025-12-08 18:44:00,635 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:44:00
+Waiting 30s before next run...
+
+--- Processing 2025-12-03 (5 days ago) ---
+Started: 18:44:30
+2025-12-08 18:45:49,410 INFO Playwright stopped.
+2025-12-08 18:45:49,410 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:45:49
+Waiting 30s before next run...
+
+--- Processing 2025-12-02 (6 days ago) ---
+Started: 18:46:19
+2025-12-08 18:48:03,850 INFO Playwright stopped.
+2025-12-08 18:48:03,850 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 18:48:03
+
+=== All Done! ===
+Finished: Mon Dec  8 18:48:03 GMT 2025
+=== Populating Dashboard History ===
+Started: Mon Dec  8 18:59:21 GMT 2025
+
+--- Processing 2025-12-07 (1 days ago) ---
+Started: 18:59:21
+Will use headcount CSV for week containing 2025-12-07
+2025-12-08 19:00:43,681 INFO Auto-concurrency: increased to 33 (CPU 0.0%, MEM 74.4%)
+2025-12-08 19:00:44,054 INFO Completed successfully.
+2025-12-08 19:00:44,055 INFO Task finished. Initiating shutdown...
+2025-12-08 19:00:44,099 INFO Browser instance closed.
+2025-12-08 19:00:44,125 INFO Playwright stopped.
+2025-12-08 19:00:44,125 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:00:44
+Waiting 30s before next run...
+
+--- Processing 2025-12-06 (2 days ago) ---
+Started: 19:01:14
+Will use headcount CSV for week containing 2025-12-06
+2025-12-08 19:02:15,263 INFO ============================================================
+2025-12-08 19:02:15,870 INFO Completed successfully.
+2025-12-08 19:02:15,871 INFO Task finished. Initiating shutdown...
+2025-12-08 19:02:15,921 INFO Browser instance closed.
+2025-12-08 19:02:15,942 INFO Playwright stopped.
+2025-12-08 19:02:15,943 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:02:16
+Waiting 30s before next run...
+
+--- Processing 2025-12-05 (3 days ago) ---
+Started: 19:02:46
+Will use headcount CSV for week containing 2025-12-05
+2025-12-08 19:04:15,565 INFO ============================================================
+2025-12-08 19:04:16,166 INFO Completed successfully.
+2025-12-08 19:04:16,167 INFO Task finished. Initiating shutdown...
+2025-12-08 19:04:16,258 INFO Browser instance closed.
+2025-12-08 19:04:16,279 INFO Playwright stopped.
+2025-12-08 19:04:16,280 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:04:16
+Waiting 30s before next run...
+
+--- Processing 2025-12-04 (4 days ago) ---
+Started: 19:04:46
+Will use headcount CSV for week containing 2025-12-04
+2025-12-08 19:06:13,872 INFO ============================================================
+2025-12-08 19:06:14,478 INFO Completed successfully.
+2025-12-08 19:06:14,480 INFO Task finished. Initiating shutdown...
+2025-12-08 19:06:14,531 INFO Browser instance closed.
+2025-12-08 19:06:14,551 INFO Playwright stopped.
+2025-12-08 19:06:14,551 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:06:14
+Waiting 30s before next run...
+
+--- Processing 2025-12-03 (5 days ago) ---
+Started: 19:06:44
+Will use headcount CSV for week containing 2025-12-03
+2025-12-08 19:07:48,720 INFO ============================================================
+2025-12-08 19:07:49,454 INFO Completed successfully.
+2025-12-08 19:07:49,455 INFO Task finished. Initiating shutdown...
+2025-12-08 19:07:49,508 INFO Browser instance closed.
+2025-12-08 19:07:49,530 INFO Playwright stopped.
+2025-12-08 19:07:49,530 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:07:49
+Waiting 30s before next run...
+
+--- Processing 2025-12-02 (6 days ago) ---
+Started: 19:08:19
+Will use headcount CSV for week containing 2025-12-02
+2025-12-08 19:10:30,131 INFO Auto-concurrency: increased to 17 (CPU 0.0%, MEM 81.7%)
+2025-12-08 19:10:30,597 INFO Completed successfully.
+2025-12-08 19:10:30,599 INFO Task finished. Initiating shutdown...
+2025-12-08 19:10:30,644 INFO Browser instance closed.
+2025-12-08 19:10:30,665 INFO Playwright stopped.
+2025-12-08 19:10:30,665 INFO Run complete.
+Loaded confirmed hours for 107 stores
+Loaded confirmed hours for 107 stores
+Report saved to output/daily_update_20251208.html
+✅ Dashboard Gist updated (7 days of history)
+Completed: 19:10:30
+
+=== All Done! ===
+Finished: Mon Dec  8 19:10:30 GMT 2025

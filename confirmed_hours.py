@@ -282,14 +282,23 @@ def get_forecast_hours_wtd(
     return total
 
 
-def find_headcount_csv(base_dir: str) -> Optional[str]:
+def find_headcount_csv(base_dir: str, target_date: str = None) -> Optional[str]:
     """
-    Find the most recent Amazon Headcount CSV in the directory.
+    Find the appropriate Amazon Headcount CSV for the target date.
+    
+    The CSV filename contains the week ending date (DD_MM_YYYY).
+    This selects the CSV whose week contains the target date.
+    
+    Args:
+        base_dir: Directory to search in
+        target_date: Date string (YYYY-MM-DD) to find CSV for, or None for most recent
     
     Returns:
         Path to the CSV file, or None if not found
     """
     import glob
+    import re
+    from datetime import datetime, timedelta
     
     # Look for files matching the pattern
     patterns = [
@@ -298,14 +307,62 @@ def find_headcount_csv(base_dir: str) -> Optional[str]:
         'confirmed_hours.csv',
     ]
     
+    all_matches = []
     for pattern in patterns:
-        matches = glob.glob(os.path.join(base_dir, pattern))
-        if matches:
-            # Return the most recently modified one
-            matches.sort(key=os.path.getmtime, reverse=True)
-            return matches[0]
+        all_matches.extend(glob.glob(os.path.join(base_dir, pattern)))
     
-    return None
+    if not all_matches:
+        return None
+    
+    # If no target date, return most recently modified
+    if not target_date:
+        all_matches.sort(key=os.path.getmtime, reverse=True)
+        return all_matches[0]
+    
+    # Parse target date
+    try:
+        target_dt = datetime.strptime(target_date, '%Y-%m-%d')
+    except ValueError:
+        app_logger.warning(f"Invalid target_date format: {target_date}, using most recent CSV")
+        all_matches.sort(key=os.path.getmtime, reverse=True)
+        return all_matches[0]
+    
+    # Extract week ending dates from filenames and find best match
+    # Filename pattern: ...DD_MM_YYYY - Week N.csv
+    date_pattern = re.compile(r'(\d{2}_\d{2}_\d{4})')
+    
+    best_match = None
+    best_week_end = None
+    
+    for filepath in all_matches:
+        filename = os.path.basename(filepath)
+        match = date_pattern.search(filename)
+        if match:
+            try:
+                # Parse the week ending date from filename (DD_MM_YYYY)
+                week_end_str = match.group(1)
+                week_end = datetime.strptime(week_end_str, '%d_%m_%Y')
+                week_start = week_end - timedelta(days=6)  # Week is 7 days
+                
+                # Check if target date falls within this week
+                if week_start <= target_dt <= week_end:
+                    app_logger.info(f"Selected headcount CSV for {target_date}: {filename}")
+                    return filepath
+                
+                # Track the closest week as fallback
+                if best_week_end is None or abs((week_end - target_dt).days) < abs((best_week_end - target_dt).days):
+                    best_week_end = week_end
+                    best_match = filepath
+            except ValueError:
+                continue
+    
+    # Return closest match or most recent
+    if best_match:
+        app_logger.info(f"Using closest headcount CSV: {os.path.basename(best_match)}")
+        return best_match
+    
+    all_matches.sort(key=os.path.getmtime, reverse=True)
+    return all_matches[0]
 
 
 if __name__ == '__main__':
