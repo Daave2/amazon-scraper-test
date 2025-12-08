@@ -389,21 +389,16 @@ async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_q
         wtd_end = None
         
         if fetch_wtd:
-            # WTD is typically Sunday to Yesterday (inclusive)
+            # WTD is Monday to the report date (inclusive)
+            # Week starts on MONDAY
             from datetime import timedelta
-            # If start_date is set (yesterday), use that as the end of WTD
-            # Calculate start of week (Sunday)
             if start_date:
-                # weekday(): Mon=0, Sun=6. 
-                # If we want start of week to be Sunday:
-                # If today is Mon(0), last Sun is -1 day.
-                # If today is Sun(6), last Sun is 0 days? Or -7?
-                # Usually WTD starts from the most recent Sunday.
-                # Let's derive from the start_date (which is yesterday)
-                # If yesterday was Monday (0), start of week Sunday is -1 day.
-                days_to_subtract = (start_date.weekday() + 1) % 7
-                wtd_start = (start_date - timedelta(days=days_to_subtract)).replace(hour=0, minute=0, second=0)
-                wtd_end = end_date # Yesterday end
+                # weekday(): Mon=0, Tue=1, ..., Sun=6
+                # If start_date is Sunday (weekday=6), we want the PREVIOUS Monday (6 days back)
+                # If start_date is Monday (weekday=0), we want THAT Monday (0 days back)
+                days_since_monday = start_date.weekday()  # Mon=0, Sun=6
+                wtd_start = (start_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0)
+                wtd_end = end_date  # End of yesterday
                 app_logger.info(f"{log_prefix} fetching WTD from {wtd_start.strftime('%Y-%m-%d')} to {wtd_end.strftime('%Y-%m-%d')}")
         
         while True:
