@@ -179,6 +179,12 @@
             font-weight: 600;
             color: #1e3a5f;
             background: #e9f0f7 !important;
+            border-bottom: 3px solid #1e3a5f !important;
+        }
+
+        /* Last row in RM group gets bottom border */
+        tr.rm-group-end td {
+            border-bottom: 3px solid #1e3a5f !important;
         }
 
         .metric-good {
@@ -585,6 +591,19 @@
         th.sortable.sort-desc::after {
             content: '↓';
             opacity: 1;
+        }
+
+        /* Store Drill-Down Links */
+        .store-link {
+            color: #1e3a5f;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .store-link:hover {
+            color: #2980b9;
+            text-decoration: underline;
         }
 
         /* Mobile Responsive */
@@ -1052,14 +1071,16 @@
 
                     stores.forEach((store, idx) => {
                         const isWorst = worstStoreNames.includes(store.store);
-                        const rowClass = isWorst ? 'worst-performer' : '';
+                        const isLastInGroup = idx === stores.length - 1;
+                        let rowClass = isWorst ? 'worst-performer' : '';
+                        if (isLastInGroup) rowClass += ' rm-group-end';
                         const rankBadge = isWorst ? '<span class="rank-badge">Top 3 INF</span>' : '';
 
-                        regionHtml += '<tr class="' + rowClass + '">';
+                        regionHtml += '<tr class="' + rowClass.trim() + '">';
                         if (idx === 0) {
                             regionHtml += '<td class="manager-cell" rowspan="' + stores.length + '">' + managerName + '</td>';
                         }
-                        regionHtml += '<td>' + (store.store || '') + rankBadge + '</td>';
+                        regionHtml += '<td><a class="store-link" href="#" onclick="drillDownToStoreINF(\'' + (store.store || '').replace(/'/g, "\\'") + '\'); return false;">' + (store.store || '') + '</a>' + rankBadge + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.inf_y, 2, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.inf_wtd, 2, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
                         regionHtml += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
@@ -1271,11 +1292,13 @@
 
                 for (const [managerName, stores] of Object.entries(managers)) {
                     stores.forEach((store, idx) => {
-                        html += '<tr>';
+                        const isLastInGroup = idx === stores.length - 1;
+                        const rowClass = isLastInGroup ? 'rm-group-end' : '';
+                        html += '<tr class="' + rowClass + '">';
                         if (idx === 0) {
                             html += '<td class="manager-cell" rowspan="' + stores.length + '">' + managerName + '</td>';
                         }
-                        html += '<td>' + (store.store || '') + '</td>';
+                        html += '<td><a class="store-link" href="#" onclick="drillDownToStoreINF(\'' + (store.store || '').replace(/'/g, "\\'") + '\'); return false;">' + (store.store || '') + '</a></td>';
                         html += '<td class="' + getMetricClass(store.inf_y, 2, 3, false) + '">' + formatPercent(store.inf_y) + '</td>';
                         html += '<td class="' + getMetricClass(store.inf_wtd, 2, 3, false) + '">' + formatPercent(store.inf_wtd) + '</td>';
                         html += '<td class="' + getMetricClass(store.lates_y, 0.5, 2, false) + '">' + formatPercent(store.lates_y) + '</td>';
@@ -1526,6 +1549,33 @@
             }
 
             updateUrlState();
+        }
+
+        function drillDownToStoreINF(storeName) {
+            // Switch to the Network INF tab
+            switchTab('network-inf');
+
+            // Wait for data to load if needed, then set the filter
+            function applyStoreFilter() {
+                const storeFilterSelect = document.getElementById('inf-store-filter');
+                if (storeFilterSelect) {
+                    // Find and select the matching store option
+                    for (let i = 0; i < storeFilterSelect.options.length; i++) {
+                        if (storeFilterSelect.options[i].value === storeName) {
+                            storeFilterSelect.value = storeName;
+                            filterNetworkINF();
+                            return;
+                        }
+                    }
+                    // If not found, it might still be loading - wait and retry
+                    if (networkINFItems.length === 0) {
+                        setTimeout(applyStoreFilter, 300);
+                    }
+                }
+            }
+
+            // Give a brief moment for the tab to switch and data to potentially load
+            setTimeout(applyStoreFilter, 100);
         }
 
         function loadINFDates() {
