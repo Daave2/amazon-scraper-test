@@ -13,6 +13,9 @@ from playwright.async_api import BrowserContext, Browser, Page, TimeoutError, ex
 from typing import Dict
 from datetime import datetime
 
+# Import API-first scraper for optimized data collection
+from api_scraper import fetch_store_metrics_with_lates_browser
+
 
 async def auto_concurrency_manager(concurrency_limit_ref: dict, last_change_ref: dict,
                                    auto_enabled: bool, auto_min: int, auto_max: int,
@@ -276,3 +279,125 @@ async def worker_task(worker_id: int, browser: Browser, storage_template: Dict, 
     finally:
         if context: await context.close()
         app_logger.info(f"[Worker-{worker_id}] Shutting down.")
+
+
+async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_queue: Queue,
+                          submission_queue: Queue, page_timeout: int, action_timeout: int,
+                          active_workers_ref: dict, concurrency_limit_ref: dict,
+                          concurrency_condition, get_date_range_func, app_logger):
+    """API-first worker task that uses direct API calls with browser context switching.
+    
+    This worker:
+    1. Creates a browser context for session management
+    2. For each store, navigates to set context then calls APIs directly
+    3. Gets all metrics including accurate Lates via API
+    4. Is significantly faster than full browser scraping
+    
+    Args:
+        worker_id: Worker identifier
+        browser: Playwright browser instance
+        storage_template: Auth state template
+        job_queue: Queue of stores to process
+        submission_queue: Queue for form submission
+        page_timeout: Page navigation timeout
+        action_timeout: Action timeout
+        active_workers_ref: Dict tracking active workers
+        concurrency_limit_ref: Dict tracking concurrency limit
+        concurrency_condition: Asyncio Condition for concurrency control
+        get_date_range_func: Function to get date range config
+        app_logger: Logger instance
+    """
+    log_prefix = f"[API-Worker-{worker_id}]"
+    app_logger.info(f"{log_prefix} Starting up (API-first mode).")
+    context = None
+    page = None
+    
+    try:
+        context = await browser.new_context(storage_state=storage_template)
+        context.set_default_navigation_timeout(page_timeout)
+        context.set_default_timeout(action_timeout)
+        page = await context.new_page()
+        
+        # Get date range configuration
+        date_range = get_date_range_func()
+        start_date = None
+        end_date = None
+        
+        if date_range:
+            from datetime import datetime, timedelta
+            from pytz import timezone
+            tz = timezone('Europe/London')
+            now = datetime.now(tz)
+            
+            mode = date_range.get('mode', 'today')
+            
+            if mode == 'yesterday':
+                # Yesterday: midnight to 11:59 PM
+                yesterday = now - timedelta(days=1)
+                start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=0)
+            elif mode == 'today':
+                # Today: midnight to now
+                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = now
+            elif mode == 'last_7_days':
+                start_date = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = now
+            elif mode == 'last_30_days':
+                start_date = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = now
+            elif mode == 'custom' and date_range.get('start_date'):
+                # Parse custom dates from config
+                try:
+                    start_str = date_range.get('start_date', '')
+                    end_str = date_range.get('end_date', '')
+                    if start_str:
+                        start_date = datetime.strptime(start_str, '%m/%d/%Y').replace(tzinfo=tz, hour=0, minute=0)
+                    if end_str:
+                        end_date = datetime.strptime(end_str, '%m/%d/%Y').replace(tzinfo=tz, hour=23, minute=59)
+                except:
+                    pass  # Use defaults if parsing fails
+        
+        while True:
+            try:
+                store_item = job_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            
+            store_name = store_item.get('store_name', 'Unknown')
+            
+            # Enforce Concurrency Limit
+            async with concurrency_condition:
+                while active_workers_ref['value'] >= concurrency_limit_ref['value']:
+                    await concurrency_condition.wait()
+                active_workers_ref['value'] += 1
+
+            try:
+                # Use API-first approach with browser context switching
+                success, form_data = await fetch_store_metrics_with_lates_browser(
+                    page, store_item, start_date, end_date
+                )
+                
+                if success:
+                    # Submit to form queue
+                    await submission_queue.put(form_data)
+                    app_logger.info(f"{log_prefix} [{store_name}] API fetch complete: Orders={form_data['orders']}, Lates={form_data['lates']}")
+                else:
+                    error = form_data.get('error', 'Unknown error')
+                    app_logger.warning(f"{log_prefix} [{store_name}] API fetch failed: {error}")
+                    
+            except Exception as e:
+                app_logger.error(f"{log_prefix} [{store_name}] Error: {e}")
+            finally:
+                async with concurrency_condition:
+                    active_workers_ref['value'] -= 1
+                    concurrency_condition.notify_all()
+                job_queue.task_done()
+            
+    except Exception as e:
+        app_logger.error(f"{log_prefix} Crashed: {e}")
+    finally:
+        if page: await page.close()
+        if context: await context.close()
+        app_logger.info(f"{log_prefix} Shutting down.")
+

@@ -23,7 +23,7 @@ from auth import check_if_login_needed, perform_login_and_otp, prime_master_sess
 from date_range import get_date_time_range_from_config, apply_date_time_range
 from webhook import (post_to_chat_webhook, post_job_summary, post_performance_highlights,
                     post_quick_actions_card, add_to_pending_chat, flush_pending_chat_entries, log_submission)
-from workers import auto_concurrency_manager, http_form_submitter_worker, process_single_store, worker_task
+from workers import auto_concurrency_manager, http_form_submitter_worker, process_single_store, worker_task, api_worker_task
 from inf_scraper import run_inf_analysis
 
 #######################################################################
@@ -119,6 +119,7 @@ FIELD_MAP = {
 
 INITIAL_CONCURRENCY = config.get('initial_concurrency', 30)
 NUM_FORM_SUBMITTERS = config.get('num_form_submitters', 2)
+USE_API_FIRST = config.get('use_api_first', True)  # Enable API-first scraping by default
 
 AUTO_CONF = config.get('auto_concurrency', {})
 AUTO_ENABLED = AUTO_CONF.get('enabled', False)
@@ -319,16 +320,26 @@ async def process_urls():
         for i in range(NUM_FORM_SUBMITTERS)
     ]
     
-    # Start Worker Pool
-    app_logger.info(f"Spinning up {pool_size} browser workers...")
-    workers = [
-        asyncio.create_task(worker_task(
-            i+1, browser, storage_template, job_queue, submission_queue, PAGE_TIMEOUT, ACTION_TIMEOUT,
-            process_store_wrapper, active_workers_ref, concurrency_limit_ref,
-            concurrency_condition, app_logger
-        ))
-        for i in range(pool_size)
-    ]
+    # Start Worker Pool - use API-first workers if enabled, otherwise browser workers
+    if USE_API_FIRST:
+        app_logger.info(f"Spinning up {pool_size} API-first workers (optimized mode)...")
+        workers = [
+            asyncio.create_task(api_worker_task(
+                i+1, browser, storage_template, job_queue, submission_queue, PAGE_TIMEOUT, ACTION_TIMEOUT,
+                active_workers_ref, concurrency_limit_ref, concurrency_condition, get_date_range, app_logger
+            ))
+            for i in range(pool_size)
+        ]
+    else:
+        app_logger.info(f"Spinning up {pool_size} browser workers (legacy mode)...")
+        workers = [
+            asyncio.create_task(worker_task(
+                i+1, browser, storage_template, job_queue, submission_queue, PAGE_TIMEOUT, ACTION_TIMEOUT,
+                process_store_wrapper, active_workers_ref, concurrency_limit_ref,
+                concurrency_condition, app_logger
+            ))
+            for i in range(pool_size)
+        ]
     
     # Wait for all jobs to be processed
     await asyncio.gather(*workers)
