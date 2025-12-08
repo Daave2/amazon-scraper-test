@@ -86,23 +86,24 @@ class ReportGenerator:
             uph_y = parse_metric(entry.get('uph', 0))
             uph_wtd = parse_metric(entry.get('uph_WTD', 0) if entry.get('has_wtd') else entry.get('uph', 0))
             
-            # Calculate Available vs Confirmed Hours and Available vs Requested
-            avc_y, avc_wtd, avr_wtd = self._calculate_avc(entry, store_name, day_of_week)
+            # Calculate Available vs Confirmed Hours, Available vs Requested, and financials
+            metrics = self._calculate_avc(entry, store_name, day_of_week)
             
             row = {
                 'store': store_name,
-                'rate_my_exp': 0.0, # Placeholder
+                'rate_my_exp': 0.0, # Placeholder - removed from report for now
                 'inf_y': inf_y,
                 'inf_wtd': inf_wtd,
                 'lates_y': lates_y,
                 'lates_wtd': lates_wtd,
                 'uph_y': uph_y,
                 'uph_wtd': uph_wtd,
-                'avc_y': avc_y,
-                'avc_wtd': avc_wtd,
-                'avr_wtd': avr_wtd,  # Available vs Requested (Forecasted) Hours
-                'wasted_payroll': 0, # Placeholder
-                'missed_sales': 0, # Placeholder
+                'avc_y': metrics['avc_y'],
+                'avc_wtd': metrics['avc_wtd'],
+                'avr_wtd': metrics['avr_wtd'],
+                'forecast_wtd': metrics['forecast_wtd'],  # Total Requested Hours
+                'wasted_payroll': metrics['wasted_payroll'],
+                'missed_sales': metrics['missed_sales'],
             }
             regions[region][manager].append(row)
             
@@ -313,8 +314,14 @@ class ReportGenerator:
                 html += f"<td class='{avc_wtd_class}'>{avc_wtd_display}</td>"
                 html += f"<td class='{avr_wtd_class}'>{avr_wtd_display}</td>"
                 
-                html += f"<td>-</td>" # Wasted Payroll
-                html += f"<td>-</td>" # Missed Sales
+                # Financial metrics - display with £ formatting or "-" if zero/not calculable
+                wasted = row.get('wasted_payroll', 0)
+                missed = row.get('missed_sales', 0)
+                wasted_display = f"£{int(wasted):,}" if wasted and wasted > 0 else "-"
+                missed_display = f"£{int(missed):,}" if missed and missed > 0 else "-"
+                
+                html += f"<td>{wasted_display}</td>"  # Wasted Payroll WTD
+                html += f"<td>{missed_display}</td>"  # Missed Sales Opportunity WTD
                 
                 html += "</tr>"
         
@@ -337,13 +344,160 @@ class ReportGenerator:
         if value >= good_thresh: return 'bg-green'
         if value <= bad_thresh: return 'bg-red'
         return 'bg-amber'
+    
+    def calculate_summary(self, regions_data):
+        """Calculate network-wide summary statistics."""
+        all_stores = []
+        for region, managers in regions_data.items():
+            for manager, stores in managers.items():
+                all_stores.extend(stores)
+        
+        if not all_stores:
+            return {}
+        
+        # Calculate averages
+        inf_values = [s['inf_wtd'] for s in all_stores if s.get('inf_wtd') is not None]
+        lates_values = [s['lates_wtd'] for s in all_stores if s.get('lates_wtd') is not None]
+        uph_values = [s['uph_wtd'] for s in all_stores if s.get('uph_wtd') is not None and s['uph_wtd'] > 0]
+        wasted = [s.get('wasted_payroll', 0) or 0 for s in all_stores]
+        missed = [s.get('missed_sales', 0) or 0 for s in all_stores]
+        
+        return {
+            'stores_count': len(all_stores),
+            'avg_inf': round(sum(inf_values) / len(inf_values), 2) if inf_values else None,
+            'avg_lates': round(sum(lates_values) / len(lates_values), 2) if lates_values else None,
+            'avg_uph': round(sum(uph_values) / len(uph_values), 1) if uph_values else None,
+            'total_wasted_payroll': sum(wasted),
+            'total_missed_sales': sum(missed),
+        }
+    
+    def push_to_dashboard(self, regions_data, dashboard_url=None, report_date=None):
+        """Push report data to a GitHub Gist with historical date-keyed storage."""
+        import requests
+        import json
+        
+        RETENTION_DAYS = 14  # Keep 14 days of history
+        
+        # Load config for Gist settings
+        gist_id = None
+        gist_token = None
+        
+        try:
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+            gist_id = config.get('dashboard_gist_id')
+            gist_token = config.get('gist_token')
+        except:
+            pass
+        
+        if not gist_id:
+            print("Dashboard Gist ID not configured - skipping dashboard push")
+            return False
+        
+        if not gist_token:
+            print("Gist token not configured - skipping dashboard push")
+            return False
+        
+        try:
+            summary = self.calculate_summary(regions_data)
+            date_key = report_date or datetime.now().strftime('%Y-%m-%d')
+            
+            # Fetch existing Gist data to merge with
+            gist_url = f"https://api.github.com/gists/{gist_id}"
+            headers = {
+                'Authorization': f'token {gist_token}',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            
+            existing_data = {
+                'metadata': {'available_dates': [], 'retention_days': RETENTION_DAYS},
+                'performance': {},
+                'inf_items': {}
+            }
+            
+            # Try to fetch existing data
+            try:
+                get_response = requests.get(gist_url, headers=headers, timeout=15)
+                if get_response.status_code == 200:
+                    gist_content = get_response.json()
+                    if 'dashboard_data.json' in gist_content.get('files', {}):
+                        file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
+                        existing_data = json.loads(file_content)
+            except:
+                pass  # Start fresh if fetch fails
+            
+            # Ensure structure exists
+            if 'metadata' not in existing_data:
+                existing_data['metadata'] = {'available_dates': [], 'retention_days': RETENTION_DAYS}
+            if 'performance' not in existing_data:
+                existing_data['performance'] = {}
+            if 'inf_items' not in existing_data:
+                existing_data['inf_items'] = {}
+            
+            # Add today's data
+            existing_data['performance'][date_key] = {
+                'regions': regions_data,
+                'summary': summary,
+                'stores_count': summary.get('stores_count', 0)
+            }
+            
+            # Update metadata
+            existing_data['metadata']['last_updated'] = datetime.now().isoformat()
+            
+            # Get all available dates and sort
+            all_dates = sorted(existing_data['performance'].keys(), reverse=True)
+            
+            # Prune old dates (keep only RETENTION_DAYS)
+            if len(all_dates) > RETENTION_DAYS:
+                dates_to_remove = all_dates[RETENTION_DAYS:]
+                for old_date in dates_to_remove:
+                    existing_data['performance'].pop(old_date, None)
+                    existing_data['inf_items'].pop(old_date, None)
+                all_dates = all_dates[:RETENTION_DAYS]
+            
+            existing_data['metadata']['available_dates'] = all_dates
+            
+            # Update the Gist
+            response = requests.patch(
+                gist_url,
+                json={
+                    'files': {
+                        'dashboard_data.json': {
+                            'content': json.dumps(existing_data, indent=2)
+                        }
+                    }
+                },
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                print(f"✅ Dashboard Gist updated ({len(all_dates)} days of history)")
+                return True
+            else:
+                print(f"⚠️ Dashboard Gist update failed: HTTP {response.status_code}")
+                if response.status_code == 404:
+                    print("   Hint: Check that dashboard_gist_id is correct")
+                elif response.status_code == 401:
+                    print("   Hint: Check that gist_token has 'gist' scope")
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ Dashboard push error: {e}")
+            return False
 
-    def save_report(self, report_data):
+    def save_report(self, report_data, push_dashboard=True, dashboard_url=None):
         html = self.generate_html(report_data)
         filename = f"{self.output_dir}/daily_update_{datetime.now().strftime('%Y%m%d')}.html"
         with open(filename, 'w') as f:
             f.write(html)
         print(f"Report saved to {filename}")
+        
+        # Push to dashboard if configured
+        if push_dashboard:
+            self.push_to_dashboard(report_data, dashboard_url)
+        
         return filename
 
 if __name__ == "__main__":

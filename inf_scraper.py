@@ -514,6 +514,119 @@ def generate_qr_code_data_url(sku: str) -> str:
         return ""
 
 
+def push_inf_to_dashboard(results_list: List, report_date: str = None):
+    """Push INF items data to the dashboard Gist.
+    
+    Args:
+        results_list: List of tuples (store_name, store_number, items, inf_rate)
+        report_date: Date string for the report (YYYY-MM-DD)
+    """
+    import requests
+    
+    # Load config
+    try:
+        with open('config.json', 'r') as f:
+            cfg = json.load(f)
+        gist_id = cfg.get('dashboard_gist_id')
+        gist_token = cfg.get('gist_token')
+    except:
+        return False
+    
+    if not gist_id or not gist_token:
+        app_logger.debug("Dashboard Gist not configured - skipping INF push")
+        return False
+    
+    try:
+        date_key = report_date or datetime.now().strftime('%Y-%m-%d')
+        
+        # Build INF data structure for dashboard
+        stores_data = {}
+        for store_name, store_number, items, inf_rate in results_list:
+            clean_name = sanitize_store_name(store_name, STORE_PREFIX_RE)
+            stores_data[clean_name] = {
+                'store_id': store_number,
+                'inf_rate': inf_rate,
+                'items': []
+            }
+            
+            for item in items[:10]:  # Cap at 10 items per store for dashboard
+                stores_data[clean_name]['items'].append({
+                    'sku': item.get('sku', ''),
+                    'name': item.get('name', ''),
+                    'inf_count': item.get('inf', 0),
+                    'stock': item.get('stock_on_hand'),
+                    'price': item.get('price'),
+                    'location': item.get('std_location', ''),
+                    'barcode': item.get('barcode', ''),
+                    'image_url': item.get('image_url', ''),
+                    'discontinued': item.get('product_status') and item.get('product_status') != 'A'
+                })
+        
+        # Fetch existing Gist and update inf_items section
+        gist_url = f"https://api.github.com/gists/{gist_id}"
+        headers = {
+            'Authorization': f'token {gist_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        existing_data = {'metadata': {}, 'performance': {}, 'inf_items': {}}
+        
+        try:
+            get_response = requests.get(gist_url, headers=headers, timeout=15)
+            if get_response.status_code == 200:
+                gist_content = get_response.json()
+                if 'dashboard_data.json' in gist_content.get('files', {}):
+                    file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
+                    existing_data = json.loads(file_content)
+        except:
+            pass
+        
+        # Ensure structure
+        if 'inf_items' not in existing_data:
+            existing_data['inf_items'] = {}
+        
+        # Add today's INF data
+        existing_data['inf_items'][date_key] = {
+            'stores': stores_data,
+            'store_count': len(stores_data)
+        }
+        
+        # Update metadata
+        if 'metadata' not in existing_data:
+            existing_data['metadata'] = {}
+        existing_data['metadata']['inf_last_updated'] = datetime.now().isoformat()
+        
+        # Prune old INF data (keep 14 days)
+        if len(existing_data['inf_items']) > 14:
+            sorted_dates = sorted(existing_data['inf_items'].keys(), reverse=True)
+            for old_date in sorted_dates[14:]:
+                del existing_data['inf_items'][old_date]
+        
+        # Update the Gist
+        response = requests.patch(
+            gist_url,
+            json={
+                'files': {
+                    'dashboard_data.json': {
+                        'content': json.dumps(existing_data, indent=2)
+                    }
+                }
+            },
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            app_logger.info(f"✅ INF items pushed to dashboard ({len(stores_data)} stores)")
+            return True
+        else:
+            app_logger.warning(f"⚠️ INF dashboard push failed: HTTP {response.status_code}")
+            return False
+            
+    except Exception as e:
+        app_logger.error(f"⚠️ INF dashboard push error: {e}")
+        return False
+
 async def send_inf_report(store_data, network_top_10, skip_network_report=False, title_prefix="", top_n=5, csv_urls=None):
     """Send INF report to Google Chat
     
@@ -1268,6 +1381,12 @@ async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: B
             
         except Exception as e:
             app_logger.error(f"Error exporting CSV files: {e}")
+        
+        # Push INF data to dashboard Gist
+        try:
+            push_inf_to_dashboard(results_list)
+        except Exception as e:
+            app_logger.warning(f"Failed to push INF data to dashboard: {e}")
         
         # Send Report - skip network-wide report if called from main scraper with specific stores
         # (top_n is already defined earlier in this function)
