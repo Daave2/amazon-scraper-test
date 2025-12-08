@@ -68,7 +68,7 @@ if ENRICH_STOCK_DATA and MORRISONS_BEARER_TOKEN_URL:
 
 
 # Concurrency Config
-INITIAL_CONCURRENCY = config.get('initial_concurrency', 2) # Start lower to be safe
+INITIAL_CONCURRENCY = config.get('initial_concurrency', 5) 
 AUTO_CONF = config.get('auto_concurrency', {})
 AUTO_ENABLED = AUTO_CONF.get('enabled', True) 
 AUTO_MIN_CONCURRENCY = AUTO_CONF.get('min_concurrency', 1)
@@ -397,7 +397,8 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
                 date_range_applied = await apply_date_time_range(
                     page, store_name, date_range_func, action_timeout, DEBUG_MODE, app_logger
                 )
-                if date_range_applied:
+                date_range_config = date_range_func()
+                if date_range_applied and date_range_config and date_range_config.get('mode') != 'today':
                     app_logger.info(f"[{store_name}] Date range applied to INF page")
                     # Wait for new API data after date range change (reduced from 2s to 1s)
                     await page.wait_for_timeout(1000)
