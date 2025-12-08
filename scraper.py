@@ -406,7 +406,9 @@ async def process_urls():
                     app_logger.error(f"Failed to generate report: {e}")
             
             # 3. Identify Bottom 5 INF Stores for Deep Dive (Always run if data present)
-            if True:
+            # DISABLED: This overwrites the full INF dashboard data with partial data from the top 10 worst stores.
+            # INF analysis is now handled exclusively by dedicated workflows (e.g. afternoon-inf.yml) to ensure complete data.
+            if False:
                 app_logger.info("Identifying bottom 5 INF stores for deep dive analysis...")
                 try:
                     # Create a lookup for full store details

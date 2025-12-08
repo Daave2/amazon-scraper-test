@@ -1057,7 +1057,15 @@
                 byRegion[store.regionName][store.managerName].push(store);
             });
 
-            for (const [regionName, managers] of Object.entries(byRegion)) {
+            // Sort regions: North, South, then others
+            const sortedRegions = Object.entries(byRegion).sort((a, b) => {
+                const order = { 'North': 1, 'South': 2 };
+                const valA = order[a[0]] || 99;
+                const valB = order[b[0]] || 99;
+                return valA - valB;
+            });
+
+            for (const [regionName, managers] of sortedRegions) {
                 let regionHtml = '';
 
                 for (const [managerName, stores] of Object.entries(managers)) {
@@ -1188,8 +1196,8 @@
 
             // Sort by INF to find worst and best
             allStores.sort((a, b) => b.inf - a.inf);
-            const worstStore = allStores[0];
-            const bestStore = allStores[allStores.length - 1];
+            const worstStores = allStores.slice(0, 5);
+            const bestStores = allStores.slice(-5).reverse();
             const aboveThreshold = allStores.filter(s => s.inf > 2).length;
 
             // Helper for trend indicators (lower is better for INF/Lates, higher is better for UPH)
@@ -1238,22 +1246,34 @@
 
             // Render callout cards
             let calloutHtml = '';
-            if (worstStore) {
+
+            // Highest INF (Worst 5)
+            if (worstStores.length > 0) {
                 calloutHtml += '<div class="callout-card callout-bad">';
                 calloutHtml += '<div class="callout-icon">⚠️</div>';
                 calloutHtml += '<div class="callout-content">';
-                calloutHtml += '<div class="callout-title">Highest INF</div>';
-                calloutHtml += '<div class="callout-value">' + worstStore.name + '</div>';
-                calloutHtml += '<div class="callout-detail">INF: ' + formatPercent(worstStore.inf) + '</div>';
+                calloutHtml += '<div class="callout-title">Highest INF (Bottom 5)</div>';
+                worstStores.forEach(s => {
+                    calloutHtml += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
+                    calloutHtml += '<span>' + s.name + '</span>';
+                    calloutHtml += '<span style="font-weight:600;">' + formatPercent(s.inf) + '</span>';
+                    calloutHtml += '</div>';
+                });
                 calloutHtml += '</div></div>';
             }
-            if (bestStore && bestStore.name !== worstStore?.name) {
+
+            // Lowest INF (Top 5)
+            if (bestStores.length > 0) {
                 calloutHtml += '<div class="callout-card callout-good">';
                 calloutHtml += '<div class="callout-icon">🏆</div>';
                 calloutHtml += '<div class="callout-content">';
-                calloutHtml += '<div class="callout-title">Lowest INF</div>';
-                calloutHtml += '<div class="callout-value">' + bestStore.name + '</div>';
-                calloutHtml += '<div class="callout-detail">INF: ' + formatPercent(bestStore.inf) + '</div>';
+                calloutHtml += '<div class="callout-title">Lowest INF (Top 5)</div>';
+                bestStores.forEach(s => {
+                    calloutHtml += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">';
+                    calloutHtml += '<span>' + s.name + '</span>';
+                    calloutHtml += '<span style="font-weight:600;">' + formatPercent(s.inf) + '</span>';
+                    calloutHtml += '</div>';
+                });
                 calloutHtml += '</div></div>';
             }
             if (aboveThreshold > 0) {
@@ -1276,7 +1296,15 @@
             const regions = data.regions || {};
             let html = '';
 
-            for (const [regionName, managers] of Object.entries(regions)) {
+            // Sort regions: North, South, then others
+            const sortedRegions = Object.entries(regions).sort((a, b) => {
+                const order = { 'North': 1, 'South': 2 };
+                const valA = order[a[0]] || 99;
+                const valB = order[b[0]] || 99;
+                return valA - valB;
+            });
+
+            for (const [regionName, managers] of sortedRegions) {
                 if (regionName === 'Unknown') continue;
 
                 html += '<div class="region-section">';
