@@ -225,6 +225,8 @@ async def fetch_store_metrics(
                         'time_available': formatted_time_available,
                         # Additional fields from API (for future use)
                         '_api_data': {
+                            'time_available_ms': milliseconds_from_api,  # Raw ms for calculations
+                            'time_available_hours': milliseconds_from_api / 3600000.0,  # Hours
                             'acceptance_rate': api_data.get('AcceptanceRate_V2', 0),
                             'rejection_rate': api_data.get('RejectionRate_V2', 0),
                             'replacement_rate': api_data.get('ReplacementRate_V2', 0),

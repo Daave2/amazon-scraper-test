@@ -1,13 +1,24 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
+import glob
+
+from confirmed_hours import (
+    parse_confirmed_hours_csv, 
+    get_confirmed_hours_for_day, 
+    get_confirmed_hours_wtd,
+    get_forecast_hours_for_day,
+    get_forecast_hours_wtd,
+    find_headcount_csv
+)
 
 class ReportGenerator:
-    def __init__(self, managers_file='managers.json', output_dir='output'):
+    def __init__(self, managers_file='managers.json', output_dir='output', headcount_csv=None):
         self.managers_file = managers_file
         self.output_dir = output_dir
         self.load_managers()
+        self.load_confirmed_hours(headcount_csv)
         
     def load_managers(self):
         try:
@@ -19,10 +30,33 @@ class ReportGenerator:
             print(f"Warning: {self.managers_file} not found. Grouping will be limited.")
             self.store_map = {}
             self.settings = {'hourly_rate': 11.00, 'avg_item_value': 3.50}
+    
+    def load_confirmed_hours(self, headcount_csv=None):
+        """Load confirmed hours from CSV file."""
+        self.confirmed_hours = {}
+        
+        # Find the CSV if not specified
+        if headcount_csv is None:
+            headcount_csv = find_headcount_csv('.')
+        
+        if headcount_csv:
+            self.confirmed_hours = parse_confirmed_hours_csv(headcount_csv)
+            print(f"Loaded confirmed hours for {len(self.confirmed_hours)} stores")
+        else:
+            print("Warning: No headcount CSV found. Confirmed hours will not be available.")
 
-    def process_data(self, store_data_list):
+    def process_data(self, store_data_list, report_date=None):
         """Aggregate and enrich data for the report."""
         regions = {'North': {}, 'South': {}, 'Unknown': {}}
+        
+        # Determine the report date (yesterday by default)
+        if report_date is None:
+            report_date = datetime.now() - timedelta(days=1)
+        elif isinstance(report_date, str):
+            report_date = datetime.strptime(report_date, '%Y-%m-%d')
+        
+        # Get day of week for confirmed hours lookup (0=Monday, 6=Sunday)
+        day_of_week = report_date.weekday()
         
         for entry in store_data_list:
             store_name = entry.get('store', 'Unknown').replace('Morrisons - ', '')
@@ -52,6 +86,9 @@ class ReportGenerator:
             uph_y = parse_metric(entry.get('uph', 0))
             uph_wtd = parse_metric(entry.get('uph_WTD', 0) if entry.get('has_wtd') else entry.get('uph', 0))
             
+            # Calculate Available vs Confirmed Hours and Available vs Requested
+            avc_y, avc_wtd, avr_wtd = self._calculate_avc(entry, store_name, day_of_week)
+            
             row = {
                 'store': store_name,
                 'rate_my_exp': 0.0, # Placeholder
@@ -61,15 +98,101 @@ class ReportGenerator:
                 'lates_wtd': lates_wtd,
                 'uph_y': uph_y,
                 'uph_wtd': uph_wtd,
-                'avc_y': 0.0, # Placeholder
-                'avc_wtd': 0.0, # Placeholder
-                'avr_wtd': 0.0, # Placeholder (Available vs Requested)
+                'avc_y': avc_y,
+                'avc_wtd': avc_wtd,
+                'avr_wtd': avr_wtd,  # Available vs Requested (Forecasted) Hours
                 'wasted_payroll': 0, # Placeholder
                 'missed_sales': 0, # Placeholder
             }
             regions[region][manager].append(row)
             
         return regions
+    
+    def _calculate_avc(self, entry, store_name, day_of_week):
+        """Calculate Available vs Confirmed Hours, Available vs Requested, and financial metrics.
+        
+        Formulas:
+        - Available vs Confirmed = (Available Hours / Confirmed Hours) × 100
+        - Available vs Requested = (Available Hours / Forecasted Hours) × 100
+        - Hours Lost = max(0, Confirmed Hours - Available Hours)
+        - Wasted Payroll = Hours Lost × £11/hour
+        - Missed Sales = Hours Lost × £152/hour (avg sales per productive hour)
+        """
+        # Constants
+        HOURLY_RATE = 11.0  # £11 per hour
+        SALES_PER_HOUR = 152.0  # £152 average sales per productive hour
+        
+        avc_y = None
+        avc_wtd = None
+        avr_wtd = None
+        hours_lost_wtd = 0.0
+        wasted_payroll = 0.0
+        missed_sales = 0.0
+        forecast_wtd = None
+        
+        # Get available hours from API data
+        api_data = entry.get('_api_data', {})
+        available_hours_y = api_data.get('time_available_hours', 0.0)
+        
+        # Fallback: parse from formatted time_available string (e.g., "3:45")
+        if not available_hours_y:
+            time_str = entry.get('time_available', '0:00')
+            try:
+                parts = time_str.split(':')
+                if len(parts) == 2:
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    available_hours_y = hours + (minutes / 60.0)
+            except (ValueError, IndexError):
+                available_hours_y = 0.0
+        
+        # Get WTD available hours
+        available_hours_wtd = api_data.get('time_available_hours_wtd', 0.0)
+        if not available_hours_wtd:
+            time_str_wtd = entry.get('time_available_WTD', entry.get('time_available', '0:00'))
+            try:
+                parts = time_str_wtd.split(':')
+                if len(parts) == 2:
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    available_hours_wtd = hours + (minutes / 60.0)
+            except (ValueError, IndexError):
+                available_hours_wtd = 0.0
+        
+        # Get confirmed hours from CSV
+        confirmed_y = get_confirmed_hours_for_day(self.confirmed_hours, store_name, day_of_week)
+        confirmed_wtd = get_confirmed_hours_wtd(self.confirmed_hours, store_name, day_of_week)
+        
+        # Get forecasted (requested) hours from CSV  
+        forecast_wtd = get_forecast_hours_wtd(self.confirmed_hours, store_name, day_of_week)
+        
+        # Calculate Available vs Confirmed percentages
+        if confirmed_y and confirmed_y > 0 and available_hours_y > 0:
+            avc_y = round((available_hours_y / confirmed_y) * 100, 1)
+        
+        if confirmed_wtd and confirmed_wtd > 0 and available_hours_wtd > 0:
+            avc_wtd = round((available_hours_wtd / confirmed_wtd) * 100, 1)
+        
+        # Calculate Available vs Requested (Forecasted) percentage
+        if forecast_wtd and forecast_wtd > 0 and available_hours_wtd > 0:
+            avr_wtd = round((available_hours_wtd / forecast_wtd) * 100, 1)
+        
+        # Calculate financial metrics (based on confirmed vs available)
+        if confirmed_wtd and confirmed_wtd > 0 and available_hours_wtd > 0:
+            hours_lost_wtd = max(0, confirmed_wtd - available_hours_wtd)
+            if hours_lost_wtd > 0:
+                wasted_payroll = round(hours_lost_wtd * HOURLY_RATE, 0)  # £11 per hour
+                missed_sales = round(hours_lost_wtd * SALES_PER_HOUR, 0)  # £152 per hour
+        
+        return {
+            'avc_y': avc_y,
+            'avc_wtd': avc_wtd,
+            'avr_wtd': avr_wtd,
+            'forecast_wtd': forecast_wtd,  # Total requested hours
+            'hours_lost_wtd': hours_lost_wtd,
+            'wasted_payroll': wasted_payroll,
+            'missed_sales': missed_sales,
+        }
 
     def generate_html(self, regions_data):
         """Generate HTML report string matching the screenshot."""
@@ -176,9 +299,19 @@ class ReportGenerator:
                 html += f"<td class='{self._color_high(row['uph_y'], 90, 80)}'>{row['uph_y']}</td>"
                 html += f"<td class='{self._color_high(row['uph_wtd'], 90, 80)}'>{row['uph_wtd']}</td>"
                 
-                html += f"<td class='{self._color_high(row['avc_y'], 95, 90)}'>-</td>"
-                html += f"<td class='{self._color_high(row['avc_wtd'], 95, 90)}'>-</td>"
-                html += f"<td class='{self._color_high(row['avr_wtd'], 95, 90)}'>-</td>"
+                # Available vs Confirmed Hours - display value or "-" if not calculable
+                avc_y_display = f"{row['avc_y']}%" if row['avc_y'] is not None else "-"
+                avc_wtd_display = f"{row['avc_wtd']}%" if row['avc_wtd'] is not None else "-"
+                avc_y_class = self._color_high(row['avc_y'] or 0, 95, 85) if row['avc_y'] else ''
+                avc_wtd_class = self._color_high(row['avc_wtd'] or 0, 95, 85) if row['avc_wtd'] else ''
+                
+                # Available vs Requested (Forecasted) Hours - WTD only
+                avr_wtd_display = f"{row['avr_wtd']}%" if row['avr_wtd'] is not None else "-"
+                avr_wtd_class = self._color_high(row['avr_wtd'] or 0, 95, 85) if row['avr_wtd'] else ''
+                
+                html += f"<td class='{avc_y_class}'>{avc_y_display}</td>"
+                html += f"<td class='{avc_wtd_class}'>{avc_wtd_display}</td>"
+                html += f"<td class='{avr_wtd_class}'>{avr_wtd_display}</td>"
                 
                 html += f"<td>-</td>" # Wasted Payroll
                 html += f"<td>-</td>" # Missed Sales
