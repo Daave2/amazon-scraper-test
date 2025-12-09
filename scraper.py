@@ -363,29 +363,28 @@ async def process_urls():
             await post_performance_highlights(submitted_store_data, PERFORMANCE_WEBHOOK_URL, sanitize_wrapper,
                                              LOCAL_TIMEZONE, DEBUG_MODE, app_logger, APPS_SCRIPT_URL)
 
-            # 2. Generate Daily Report
-            if args.generate_report:
-                try:
-                    app_logger.info("Generating Daily Update Report...")
-                    gen = ReportGenerator()
-                    
-                    # Determine the correct report date based on date_mode FIRST
-                    from datetime import timedelta
-                    report_date = None
-                    date_mode = config.get('date_range_mode', 'today')
-                    if date_mode == 'yesterday':
-                        report_date = (datetime.now(LOCAL_TIMEZONE) - timedelta(days=1)).strftime('%Y-%m-%d')
-                    elif date_mode == 'today':
-                        report_date = datetime.now(LOCAL_TIMEZONE).strftime('%Y-%m-%d')
-                    # For other modes (last_7_days, etc), use today's date as they span multiple days
-                    
-                    # Pass report_date to process_data so correct headcount CSV is loaded
-                    processed_data = gen.process_data(submitted_store_data, report_date=report_date)
-                    
-                    report_path = gen.save_report(processed_data, report_date=report_date)
-                    app_logger.info(f"Report generated successfully: {report_path}")
-                except Exception as e:
-                    app_logger.error(f"Failed to generate report: {e}")
+            # 2. Generate Daily Report (always runs to update gist)
+            try:
+                app_logger.info("Generating Daily Update Report...")
+                gen = ReportGenerator()
+                
+                # Determine the correct report date based on date_mode FIRST
+                from datetime import timedelta
+                report_date = None
+                date_mode = config.get('date_range_mode', 'today')
+                if date_mode == 'yesterday':
+                    report_date = (datetime.now(LOCAL_TIMEZONE) - timedelta(days=1)).strftime('%Y-%m-%d')
+                elif date_mode == 'today':
+                    report_date = datetime.now(LOCAL_TIMEZONE).strftime('%Y-%m-%d')
+                # For other modes (last_7_days, etc), use today's date as they span multiple days
+                
+                # Pass report_date to process_data so correct headcount CSV is loaded
+                processed_data = gen.process_data(submitted_store_data, report_date=report_date)
+                
+                report_path = gen.save_report(processed_data, report_date=report_date)
+                app_logger.info(f"Report generated successfully: {report_path}")
+            except Exception as e:
+                app_logger.error(f"Failed to generate report: {e}")
             
             # 3. Identify Bottom 5 INF Stores for Deep Dive (Always run if data present)
             # DISABLED: This overwrites the full INF dashboard data with partial data from the top 10 worst stores.
