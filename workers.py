@@ -223,8 +223,10 @@ async def process_single_store(context: BrowserContext, store_info: Dict[str,str
                 async with metrics_lock:
                     metrics["retries"] += 1
                     metrics["retry_stores"].add(store_name)
-                sleep_time = 2 ** attempt
-                app_logger.info(f"[{store_name}] Retrying in {sleep_time}s...")
+                # Longer delays to give Amazon APIs time to recover
+                sleep_times = [10, 30, 60]  # 10s, 30s, 60s instead of 2s, 4s, 8s
+                sleep_time = sleep_times[attempt] if attempt < len(sleep_times) else 60
+                app_logger.info(f"[{store_name}] Retrying in {sleep_time}s (giving APIs recovery time)...")
                 await asyncio.sleep(sleep_time)
             else:
                 run_failures.append(f"{store_name} (Fail)")
