@@ -193,12 +193,7 @@ class ReportGenerator:
                 day_of_week
             )
             if intraday_confirmed is not None and intraday_confirmed > 0:
-                confirmed_y_original = confirmed_y
                 confirmed_y = intraday_confirmed
-                app_logger.debug(
-                    f"[{store_name}] Intraday AvC adjustment: "
-                    f"{confirmed_y_original:.1f}hrs → {confirmed_y:.1f}hrs (elapsed windows only)"
-                )
         
         confirmed_wtd = get_confirmed_hours_wtd(self.confirmed_hours, store_name, day_of_week)
         
