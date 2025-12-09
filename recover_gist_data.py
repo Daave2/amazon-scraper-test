@@ -35,10 +35,19 @@ if response.status_code != 200:
 
 gist = response.json()
 current_content = gist['files']['dashboard_data.json']['content']
-current_data = json.loads(current_content)
 
-print(f"   Current: {len(current_data.get('performance', {}))} dates")
-print(f"   Dates: {sorted(current_data.get('performance', {}).keys())}")
+# Try to parse current data, but don't fail if it's corrupted
+try:
+    current_data = json.loads(current_content)
+    current_dates = list(current_data.get('performance', {}).keys())
+    print(f"   Current: {len(current_dates)} dates")
+    if current_dates:
+        print(f"   Dates: {current_dates}")
+except json.JSONDecodeError as e:
+    print(f"   ⚠️ Current gist is corrupted: {e.msg} at line {e.lineno}")
+    print(f"   Will recover from revision history only")
+    current_data = {'performance': {}, 'inf_items': {}, 'metadata': {}}
+    current_dates = []
 
 # Step 2: Get revision history
 print("\n2️⃣ Fetching gist revision history...")

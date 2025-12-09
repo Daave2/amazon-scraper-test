@@ -455,12 +455,45 @@ class ReportGenerator:
                     gist_content = get_response.json()
                     if 'dashboard_data.json' in gist_content.get('files', {}):
                         file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
-                        fetched_data = json.loads(file_content)
-                        # Merge fetched data (preserve existing historical data)
-                        existing_data['performance'] = fetched_data.get('performance', {})
-                        existing_data['inf_items'] = fetched_data.get('inf_items', {})
-                        existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
-                        print(f"✅ Loaded {len(existing_data['performance'])} days of existing data from gist")
+                        try:
+                            fetched_data = json.loads(file_content)
+                            # Merge fetched data (preserve existing historical data)
+                            existing_data['performance'] = fetched_data.get('performance', {})
+                            existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                            existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                            print(f"✅ Loaded {len(existing_data['performance'])} days of existing data from gist")
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ Gist JSON is corrupted at line {e.lineno}: {e.msg}")
+                            print("   Attempting to recover from revision history...")
+                            
+                            # Try to recover from revision history
+                            try:
+                                import subprocess
+                                result = subprocess.run(
+                                    ['python3', 'recover_gist_data.py'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30,
+                                    cwd=os.path.dirname(__file__) or '.'
+                                )
+                                if result.returncode == 0:
+                                    print("✅ Successfully recovered data from gist history")
+                                    # Retry fetching the now-recovered data
+                                    get_response2 = requests.get(gist_url, headers=headers, timeout=15)
+                                    if get_response2.status_code == 200:
+                                        gist_content2 = get_response2.json()
+                                        file_content2 = gist_content2['files']['dashboard_data.json'].get('content', '{}')
+                                        fetched_data = json.loads(file_content2)
+                                        existing_data['performance'] = fetched_data.get('performance', {})
+                                        existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                                        existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                                        print(f"✅ Recovered {len(existing_data['performance'])} days of data")
+                                else:
+                                    print(f"❌ Recovery script failed: {result.stderr[:200]}")
+                                    print("   Starting fresh - historical data will be lost!")
+                            except Exception as recovery_error:
+                                print(f"❌ Recovery failed: {recovery_error}")
+                                print("   Starting fresh - historical data will be lost!")
                 else:
                     print(f"⚠️ Gist fetch returned {get_response.status_code}, starting with empty data")
             except Exception as e:
@@ -491,39 +524,53 @@ class ReportGenerator:
             # Get all available dates and sort
             all_dates = sorted(existing_data['performance'].keys(), reverse=True)
             
-            # Prune old dates (keep only RETENTION_DAYS)
+            # Prune old dates if exceeding retention
+            all_dates = sorted(existing_data['performance'].keys())
             if len(all_dates) > RETENTION_DAYS:
-                dates_to_remove = all_dates[RETENTION_DAYS:]
+                dates_to_remove = all_dates[:-RETENTION_DAYS]
                 for old_date in dates_to_remove:
                     existing_data['performance'].pop(old_date, None)
                     existing_data['inf_items'].pop(old_date, None)
-                all_dates = all_dates[:RETENTION_DAYS]
+                print(f"🗑️  Pruned {len(dates_to_remove)} old dates (retention: {RETENTION_DAYS} days)")
             
-            existing_data['metadata']['available_dates'] = all_dates
+            # CRITICAL: Clean data before JSON serialization
+            from json_cleaner import clean_for_json
+            existing_data = clean_for_json(existing_data)
+            
+            # Validate JSON before updating gist
+            try:
+                json_content = json.dumps(existing_data, indent=2)
+                # Try parsing it back to ensure it's valid
+                json.loads(json_content)
+            except (TypeError, ValueError) as e:
+                print(f"❌ ERROR: Generated JSON is invalid: {e}")
+                print(f"   This usually happens when product descriptions contain unescaped quotes")
+                print(f"   Skipping gist update to prevent data corruption")
+                return False # Return False to indicate failure
             
             # Update the Gist
-            response = requests.patch(
-                gist_url,
-                json={
-                    'files': {
-                        'dashboard_data.json': {
-                            'content': json.dumps(existing_data, indent=2)
-                        }
+            update_payload = {
+                'files': {
+                    'dashboard_data.json': {
+                        'content': json_content
                     }
-                },
-                headers=headers,
-                timeout=30
-            )
+                }
+            }
             
-            if response.status_code == 200:
-                print(f"✅ Dashboard Gist updated ({len(all_dates)} days of history)")
-                return True
-            else:
-                print(f"⚠️ Dashboard Gist update failed: HTTP {response.status_code}")
-                if response.status_code == 404:
-                    print("   Hint: Check that dashboard_gist_id is correct")
-                elif response.status_code == 401:
-                    print("   Hint: Check that gist_token has 'gist' scope")
+            try:
+                update_response = requests.patch(gist_url, headers=headers, json=update_payload, timeout=15)
+                if update_response.status_code in [200, 201]:
+                    print(f"✅ Dashboard Gist updated ({len(existing_data['performance'])} days of history)")
+                    return True
+                else:
+                    print(f"❌ Failed to update gist: HTTP {update_response.status_code}")
+                    print(f"   Response: {update_response.text[:200]}")
+                    if update_response.status_code == 404:
+                        print("   Hint: Check that dashboard_gist_id is correct")
+                    elif update_response.status_code == 401:
+                        print("   Hint: Check that gist_token has 'gist' scope")
+            except Exception as e:
+                print(f"❌ Error updating gist: {e}")
             
             return False
             

@@ -218,12 +218,13 @@ async def _extract_from_api(store_name: str, top_n: int, captured_api_data: dict
             sku = prod.get('merchantSku')
             if sku:
                 product_info[sku] = {
-                    'name': prod.get('name', ''),
-                    'image_url': prod.get('imageUrl', ''),
-                    'thumbnail_url': prod.get('thumbnailUrl', ''),
-                    'product_url': prod.get('productUrl', ''),
-                    'category': prod.get('category', ''),
+                    'name': prod.get('name') or prod.get('productName') or prod.get('title') or '',
+                    'image_url': prod.get('imageUrl') or prod.get('image') or '',
+                    'category': prod.get('category') or '',
+                    'product_url': prod.get('productUrl') or prod.get('url') or ''
                 }
+    
+    app_logger.debug(f"[{store_name}] Populated product_info for {len(product_info)} SKUs from ItemData API")
     
     # Sort by INF count (highest first) and take top N
     sorted_items = sorted(items, key=lambda x: x.get('infCount', 0), reverse=True)
@@ -233,11 +234,17 @@ async def _extract_from_api(store_name: str, top_n: int, captured_api_data: dict
         sku = item.get('merchantSku', '')
         prod = product_info.get(sku, {})
         
+        # Get product name from multiple possible sources
+        product_name = prod.get('name', '') or item.get('name', '') or item.get('title', '') or item.get('productName', '')
+        
+        if not product_name:
+            app_logger.warning(f"[{store_name}] No product name found for SKU {sku}")
+        
         extracted_data.append({
             # Existing fields (compatible with current code)
             "store": store_name,
             "sku": sku,
-            "name": prod.get('name', ''),
+            "name": product_name,
             "inf": item.get('infCount', 0),
             "image_url": prod.get('image_url', ''),
             
@@ -255,10 +262,6 @@ async def _extract_from_api(store_name: str, top_n: int, captured_api_data: dict
             "product_url": prod.get('product_url', ''),
         })
         
-        # Fallback for missing name if product lookup failed
-        if not extracted_data[-1]['name']:
-             extracted_data[-1]['name'] = item.get('name') or item.get('title') or item.get('productName') or ''
-    
     app_logger.info(f"[{store_name}] API extraction: {len(extracted_data)} items with {len(extracted_data[0]) if extracted_data else 0} fields each")
     return extracted_data
 
@@ -299,15 +302,20 @@ async def _extract_from_html(page: Page, store_name: str, top_n: int = 10) -> li
                 
                 # Columns: image(0), sku(1), product_name(2), inf_units(3), etc.
                 img_url = await cells.nth(0).locator("img").get_attribute("src")
-                sku = await cells.nth(1).locator("span").inner_text()
-                product_name = await cells.nth(2).locator("a span").inner_text()
-                inf_units = await cells.nth(3).locator("span").inner_text()
+                sku = await cells.nth(1).locator("a").inner_text()
                 
-                # Clean up
-                sku = sku.strip()
+                product_name = await cells.nth(2).locator("a span").inner_text()
+                
+                # Get INF units (number requested but not found)
+                inf_units_text = await cells.nth(3).inner_text()
+                inf_units = int(inf_units_text.strip()) if inf_units_text.strip().isdigit() else 0
+                
+                # Sanitize product name to prevent JSON corruption
                 product_name = product_name.strip()
-                inf_value = re.sub(r'[^\d]', '', inf_units)
-                inf_value = int(inf_value) if inf_value else 0
+                # Remove control characters and problematic Unicode
+                product_name = ''.join(char for char in product_name if char.isprintable() or char in '\n\t')
+                # Ensure it's properly encoded
+                product_name = product_name.encode('ascii', errors='replace').decode('ascii')
                 
                 extracted_data.append({
                     "store": store_name,
@@ -581,12 +589,42 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
                 gist_content = get_response.json()
                 if 'dashboard_data.json' in gist_content.get('files', {}):
                     file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
-                    fetched_data = json.loads(file_content)
-                    # Merge fetched data (preserve existing performance and INF data)
-                    existing_data['performance'] = fetched_data.get('performance', {})
-                    existing_data['inf_items'] = fetched_data.get('inf_items', {})
-                    existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
-                    app_logger.info(f"✅ Loaded existing gist data: {len(existing_data['performance'])} perf days, {len(existing_data['inf_items'])} INF days")
+                    try:
+                        fetched_data = json.loads(file_content)
+                        # Merge fetched data (preserve existing performance and INF data)
+                        existing_data['performance'] = fetched_data.get('performance', {})
+                        existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                        existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                        app_logger.info(f"✅ Loaded existing gist data: {len(existing_data['performance'])} perf days, {len(existing_data['inf_items'])} INF days")
+                    except json.JSONDecodeError as e:
+                        app_logger.error(f"⚠️ Gist JSON is corrupted at line {e.lineno}: {e.msg}")
+                        app_logger.error("   Attempting to recover from revision history...")
+                        
+                        # Try to recover from revision history
+                        try:
+                            import subprocess
+                            result = subprocess.run(
+                                ['python3', 'recover_gist_data.py'],
+                                capture_output=True,
+                                text=True,
+                                timeout=30
+                            )
+                            if result.returncode == 0:
+                                app_logger.info("✅ Successfully recovered data from gist history")
+                                # Retry fetching the now-recovered data
+                                get_response2 = requests.get(gist_url, headers=headers, timeout=15)
+                                if get_response2.status_code == 200:
+                                    gist_content2 = get_response2.json()
+                                    file_content2 = gist_content2['files']['dashboard_data.json'].get('content', '{}')
+                                    fetched_data = json.loads(file_content2)
+                                    existing_data['performance'] = fetched_data.get('performance', {})
+                                    existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                                    existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                            else:
+                                app_logger.error("❌ Recovery script failed, starting with empty data")
+                        except Exception as recovery_error:
+                            app_logger.error(f"❌ Recovery failed: {recovery_error}")
+                            app_logger.error("   Starting fresh - historical data will be lost!")
             else:
                 app_logger.warning(f"⚠️ Gist fetch returned {get_response.status_code}, starting with empty performance data")
         except Exception as e:
@@ -609,31 +647,45 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
             existing_data['metadata'] = {}
         existing_data['metadata']['inf_last_updated'] = datetime.now().isoformat()
         
-        # Prune old INF data (keep 14 days)
-        if len(existing_data['inf_items']) > 14:
-            sorted_dates = sorted(existing_data['inf_items'].keys(), reverse=True)
-            for old_date in sorted_dates[14:]:
-                del existing_data['inf_items'][old_date]
+        # Prune old dates beyond retention
+        retention_days = 14 # Keep 14 days of INF data
+        all_dates = sorted(existing_data['inf_items'].keys())
+        if len(all_dates) > retention_days:
+            dates_to_remove = all_dates[:-retention_days]
+            for old_date in dates_to_remove:
+                existing_data['inf_items'].pop(old_date, None)
+            app_logger.info(f"Pruned {len(dates_to_remove)} old INF dates (retention: {retention_days} days)")
+        
+        # CRITICAL: Clean data before JSON serialization
+        from json_cleaner import clean_for_json
+        existing_data = clean_for_json(existing_data)
+        
+        # Validate JSON before updating gist
+        try:
+            json_content = json.dumps(existing_data, indent=2)
+            # Try parsing it back to ensure it's valid
+            json.loads(json_content)
+        except (TypeError, ValueError) as e:
+            app_logger.error(f"ERROR: Generated JSON is invalid: {e}")
+            app_logger.error("   Product descriptions may contain unescaped quotes")
+            app_logger.error("   Skipping gist update to prevent data corruption")
+            return False # Return False to indicate failure
         
         # Update the Gist
-        response = requests.patch(
-            gist_url,
-            json={
-                'files': {
-                    'dashboard_data.json': {
-                        'content': json.dumps(existing_data, indent=2)
-                    }
+        update_payload = {
+            'files': {
+                'dashboard_data.json': {
+                    'content': json_content
                 }
-            },
-            headers=headers,
-            timeout=30
-        )
+            }
+        }
         
-        if response.status_code == 200:
-            app_logger.info(f"✅ INF items pushed to dashboard ({len(stores_data)} stores)")
+        update_response = requests.patch(gist_url, headers=headers, json=update_payload, timeout=15)
+        if update_response.status_code == 200:
+            app_logger.info(f"✅ Dashboard Gist updated ({len(existing_data['inf_items'])} INF days, {len(existing_data['performance'])} perf days)")
             return True
         else:
-            app_logger.warning(f"⚠️ INF dashboard push failed: HTTP {response.status_code}")
+            app_logger.error(f"Failed to update dashboard gist: HTTP {update_response.status_code}")
             return False
             
     except Exception as e:

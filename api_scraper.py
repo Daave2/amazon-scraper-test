@@ -144,12 +144,7 @@ async def fetch_lates_from_detailed_metrics(
                             metrics = item.get('metrics', {})
                             orders = metrics.get('OrdersShopped_V2', 0) or metrics.get('OrdersShopped', 0)
                             late_rate = metrics.get('LatePicksRate', 0.0)
-                            if orders > 0:
-                                total_orders += orders
-                                weighted_lates += late_rate * orders
-                    
-                    if total_orders > 0:
-                        return (weighted_lates / total_orders) * 100  # Convert ratio to percentage
+
                 
                 return 0.0
             else:
@@ -455,8 +450,10 @@ async def fetch_store_metrics_with_lates_browser(
                             if orders > 0:
                                 total_orders += orders
                                 weighted_lates += late_rate * orders
+                                app_logger.debug(f"[{store_name}] API late_rate: {late_rate}, orders: {orders}")
                         if total_orders > 0:
-                            lates_rate = (weighted_lates / total_orders) * 100  # Convert ratio to percentage
+                            lates_rate = weighted_lates / total_orders
+                            app_logger.debug(f"[{store_name}] Final lates_rate: {lates_rate} (from {weighted_lates}/{total_orders})")
         
         # Build form data
         milliseconds = float(api_data.get('TimeAvailable_V2', 0.0))
