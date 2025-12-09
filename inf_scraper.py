@@ -562,12 +562,13 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
             
             for item in items[:10]:  # Cap at 10 items per store for dashboard
                 # CRITICAL: Store only essential fields to prevent gist size limit (920KB)
-                # Reduced from 12 fields to 5 essential fields → 238KB to ~50KB per day
+                # Reduced from 12 fields to 6 essential fields → 238KB to ~60KB per day
                 # This allows 14-day retention without corruption
                 stores_data[clean_name]['items'].append({
                     'sku': item.get('sku', ''),
                     'name': item.get('name', '')[:100],  # Truncate long names
                     'inf_count': item.get('inf', 0),
+                    'image_url': item.get('image_url', ''),  # Needed for dashboard
                     'orders_impacted': item.get('orders_impacted', 0),
                     'picking_window': item.get('picking_window', ''),
                 })
