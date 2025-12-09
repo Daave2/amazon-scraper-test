@@ -59,6 +59,7 @@ jobs:
         
         # Dashboard Config - CRITICAL FIX
         DASHBOARD_GIST_ID: "267134a093e5906af4aeaf1c6eb50ea1"
+        INF_GIST_ID: "ab05f1ce3b536b33e2ee117fb7d5f646"
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
         
       run: |
@@ -74,6 +75,7 @@ jobs:
           "apps_script_webhook_url": "${APPS_SCRIPT_WEBHOOK_URL}",
           
           "dashboard_gist_id": "${DASHBOARD_GIST_ID}",
+          "inf_gist_id": "${INF_GIST_ID}",
           "gist_token": "${GIST_TOKEN}",
           
           "max_concurrency": 55,
@@ -96,12 +98,29 @@ jobs:
         }
         JSON
 
+    # Restore previous session state if available
+    - name: Restore Auth State
+      uses: actions/cache/restore@v3
+      with:
+        path: state.json
+        key: amazon-auth-state-${{ github.run_id }}
+        restore-keys: |
+          amazon-auth-state-
+
     # 1. PERFOMANCE SCRAPE
     - name: Run Performance Scraper
       run: python scraper.py --date-mode today
       env:
         # Pass tokens just in case scripts read env vars directly
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+    
+    # Save session state for next run
+    - name: Save Auth State
+      if: always()
+      uses: actions/cache/save@v3
+      with:
+        path: state.json
+        key: amazon-auth-state-${{ github.run_id }}
 
     # 2. INF SCRAPE (Runs after Performance)
     - name: Run INF Scraper

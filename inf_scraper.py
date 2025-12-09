@@ -317,12 +317,14 @@ async def _extract_from_html(page: Page, store_name: str, top_n: int = 10) -> li
                 # Ensure it's properly encoded
                 product_name = product_name.encode('ascii', errors='replace').decode('ascii')
                 
+                # CRITICAL: Store only essential fields to reduce gist size (238KB → ~50KB per day)
+                # This prevents hitting 920KB gist limit after 4 days
                 extracted_data.append({
-                    "store": store_name,
-                    "sku": sku,
-                    "name": product_name,
-                    "inf": inf_value,
-                    "image_url": img_url,
+                    'store': store_name,
+                    'sku': sku,
+                    'name': product_name[:100],  # Limit name length
+                    'inf': inf_units,
+                    'image_url': img_url,
                     # Placeholder fields for API data (not available in HTML)
                     "asin": "",
                     "orders_impacted": 0,
@@ -535,7 +537,7 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
     try:
         with open('config.json', 'r') as f:
             cfg = json.load(f)
-        gist_id = cfg.get('dashboard_gist_id')
+        gist_id = cfg.get('inf_gist_id') or cfg.get('dashboard_gist_id')  # Prefer dedicated INF gist
         gist_token = cfg.get('gist_token')
     except:
         return False
@@ -558,19 +560,14 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
             }
             
             for item in items[:10]:  # Cap at 10 items per store for dashboard
+                # CRITICAL: Store only essential fields to prevent gist size limit (920KB)
+                # Reduced from 12 fields to 5 essential fields → 238KB to ~50KB per day
+                # This allows 14-day retention without corruption
                 stores_data[clean_name]['items'].append({
                     'sku': item.get('sku', ''),
-                    'name': item.get('name', ''),
+                    'name': item.get('name', '')[:100],  # Truncate long names
                     'inf_count': item.get('inf', 0),
-                    'stock': item.get('stock_on_hand'),
-                    'price': item.get('price'),
-                    'location': item.get('std_location', ''),
-                    'barcode': item.get('barcode', ''),
-                    'image_url': item.get('image_url', ''),
-                    'discontinued': item.get('product_status') and item.get('product_status') != 'A',
-                    # Additional INF analytics fields
                     'orders_impacted': item.get('orders_impacted', 0),
-                    'replacement_pct': item.get('replacement_percent', 0),
                     'picking_window': item.get('picking_window', ''),
                 })
         
@@ -587,8 +584,14 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
             get_response = requests.get(gist_url, headers=headers, timeout=15)
             if get_response.status_code == 200:
                 gist_content = get_response.json()
-                if 'dashboard_data.json' in gist_content.get('files', {}):
+                # Try both filenames for backwards compatibility
+                file_content = None
+                if 'inf_data.json' in gist_content.get('files', {}):
+                    file_content = gist_content['files']['inf_data.json'].get('content', '{}')
+                elif 'dashboard_data.json' in gist_content.get('files', {}):
                     file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
+                
+                if file_content:
                     try:
                         fetched_data = json.loads(file_content)
                         # Merge fetched data (preserve existing performance and INF data)
@@ -674,7 +677,7 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
         # Update the Gist
         update_payload = {
             'files': {
-                'dashboard_data.json': {
+                'inf_data.json': {  # Use dedicated INF filename
                     'content': json_content
                 }
             }

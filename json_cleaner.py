@@ -27,10 +27,19 @@ def clean_for_json(data):
         # Clean string - remove control characters
         cleaned_str = ''.join(c if c.isprintable() or c in '\n\t' else '?' for c in data)
         # Encode to ASCII safely
-        return cleaned_str.encode('ascii', errors='replace').decode('ascii')
+        cleaned_str = cleaned_str.encode('ascii', errors='replace').decode('ascii')
+        # Limit excessive length (prevents JSON serialization issues)
+        if len(cleaned_str) > 500:
+            cleaned_str = cleaned_str[:500] + "..."
+        return cleaned_str
     
     elif isinstance(data, (int, float, bool)):
-        # Primitives are safe
+        # Check for invalid float values
+        if isinstance(data, float):
+            import math
+            if math.isnan(data) or math.isinf(data):
+                return None  # Convert NaN/Infinity to None (null in JSON)
+        # Valid primitives
         return data
     
     elif data is None:

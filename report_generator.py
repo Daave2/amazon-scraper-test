@@ -521,6 +521,10 @@ class ReportGenerator:
             # Update metadata
             existing_data['metadata']['last_updated'] = datetime.now().isoformat()
             
+            # CRITICAL: Update available_dates for dashboard
+            all_dates = sorted(existing_data['performance'].keys(), reverse=True)
+            existing_data['metadata']['available_dates'] = all_dates
+            
             # Get all available dates and sort
             all_dates = sorted(existing_data['performance'].keys(), reverse=True)
             
@@ -542,6 +546,23 @@ class ReportGenerator:
                 json_content = json.dumps(existing_data, indent=2)
                 # Try parsing it back to ensure it's valid
                 json.loads(json_content)
+                
+                # MONITOR GIST SIZE - GitHub has ~920KB limit
+                size_bytes = len(json_content)
+                size_kb = size_bytes / 1024
+                limit_kb = 920
+                usage_pct = (size_kb / limit_kb) * 100
+                
+                print(f"📊 Gist size: {size_kb:.1f} KB / {limit_kb} KB ({usage_pct:.1f}%)")
+                
+                if size_kb > limit_kb * 0.8:  # Over 80% = warning
+                    print(f"⚠️  WARNING: Gist size is {usage_pct:.1f}% of limit!")
+                    print(f"   Consider: Reduce INF items per store, increase pruning, or use separate gist")
+                elif size_kb > limit_kb:  # Over limit = error
+                    print(f"❌ ERROR: Gist exceeds size limit! ({size_kb:.1f} KB > {limit_kb} KB)")
+                    print(f"   Skipping update to prevent corruption")
+                    return False
+                    
             except (TypeError, ValueError) as e:
                 print(f"❌ ERROR: Generated JSON is invalid: {e}")
                 print(f"   This usually happens when product descriptions contain unescaped quotes")

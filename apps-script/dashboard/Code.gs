@@ -7,9 +7,10 @@
  */
 
 // ============================================================
-// CONFIGURATION - Update this with your Gist raw URL
+// CONFIGURATION - Update with your Gist raw URLs
 // ============================================================
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/Daave2/267134a093e5906af4aeaf1c6eb50ea1/raw/dashboard_data.json';
+const INF_GIST_RAW_URL = 'https://gist.githubusercontent.com/Daave2/ab05f1ce3b536b33e2ee117fb7d5f646/raw/inf_data.json';
 
 /**
  * Serve the dashboard HTML page
@@ -25,17 +26,35 @@ function doGet() {
  */
 function getDashboardData() {
   try {
-    const response = UrlFetchApp.fetch(GIST_RAW_URL + '?t=' + new Date().getTime(), {
+    // Fetch performance data
+    const perfResponse = UrlFetchApp.fetch(GIST_RAW_URL + '?t=' + new Date().getTime(), {
       muteHttpExceptions: true,
       headers: { 'Cache-Control': 'no-cache' }
     });
     
-    if (response.getResponseCode() === 200) {
-      const data = JSON.parse(response.getContentText());
-      return { ok: true, data: data };
-    } else {
-      return { ok: false, message: 'Failed to fetch: HTTP ' + response.getResponseCode() };
+    if (perfResponse.getResponseCode() !== 200) {
+      return { ok: false, message: 'Failed to fetch performance data: HTTP ' + perfResponse.getResponseCode() };
     }
+    
+    const perfData = JSON.parse(perfResponse.getContentText());
+    
+    // Fetch INF data (optional - backwards compatible)
+    try {
+      const infResponse = UrlFetchApp.fetch(INF_GIST_RAW_URL + '?t=' + new Date().getTime(), {
+        muteHttpExceptions: true,
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (infResponse.getResponseCode() === 200) {
+        const infData = JSON.parse(infResponse.getContentText());
+        // Merge INF data into performance data
+        perfData.inf_items = infData.inf_items || {};
+      }
+    } catch (e) {
+      // INF gist not available yet, use data from performance gist if exists
+    }
+    
+    return { ok: true, data: perfData };
   } catch (error) {
     return { ok: false, message: 'Error: ' + error.message };
   }
