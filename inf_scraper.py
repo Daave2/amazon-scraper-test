@@ -581,9 +581,18 @@ def push_inf_to_dashboard(results_list: List, report_date: str = None):
                 gist_content = get_response.json()
                 if 'dashboard_data.json' in gist_content.get('files', {}):
                     file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
-                    existing_data = json.loads(file_content)
-        except:
-            pass
+                    fetched_data = json.loads(file_content)
+                    # Merge fetched data (preserve existing performance and INF data)
+                    existing_data['performance'] = fetched_data.get('performance', {})
+                    existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                    existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                    app_logger.info(f"✅ Loaded existing gist data: {len(existing_data['performance'])} perf days, {len(existing_data['inf_items'])} INF days")
+            else:
+                app_logger.warning(f"⚠️ Gist fetch returned {get_response.status_code}, starting with empty performance data")
+        except Exception as e:
+            app_logger.error(f"⚠️ Failed to fetch existing gist data: {e}")
+            app_logger.error("   Starting fresh - existing performance data will be lost!")
+            # Keep the empty structure initialized above
         
         # Ensure structure
         if 'inf_items' not in existing_data:

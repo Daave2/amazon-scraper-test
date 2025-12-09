@@ -355,7 +355,8 @@ async def api_worker_task(worker_id: int, browser, storage_template: Dict, job_q
         
         # Check if we should fetch WTD as well
         # We assume if mode='yesterday' we want WTD too for the report
-        fetch_wtd = (date_range and date_range.get('mode') == 'yesterday')
+        # Fetch WTD for both 'today' and 'yesterday' modes (daily reports)
+        fetch_wtd = (date_range and date_range.get('mode') in ['today', 'yesterday'])
         wtd_start = None
         wtd_end = None
         

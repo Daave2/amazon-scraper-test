@@ -989,16 +989,24 @@
             let storeCount = 0;
             let allStores = [];
 
+            // Determine if we're viewing today's data or historical data
+            const isToday = currentDate === new Date().toISOString().split('T')[0];
+            const dayLabel = isToday ? 'Today' : 'Yest';
+
+            // Tooltip for intraday AvC warning
+            const avcTooltip = isToday ? ' ⚠️' : '';
+            const avcTitle = isToday ? 'AvC may be low for partial-day data (available hours accumulate throughout the day)' : '';
+
             // Column definitions for sorting
             const columns = [
                 { key: 'store', label: 'Store', sortable: false },
-                { key: 'inf_y', label: 'INF Yest', sortable: true },
+                { key: 'inf_y', label: 'INF ' + dayLabel, sortable: true },
                 { key: 'inf_wtd', label: 'INF Week', sortable: true },
-                { key: 'lates_y', label: 'Lates Yest', sortable: true },
+                { key: 'lates_y', label: 'Lates ' + dayLabel, sortable: true },
                 { key: 'lates_wtd', label: 'Lates Week', sortable: true },
-                { key: 'uph_y', label: 'UPH Yest', sortable: true },
+                { key: 'uph_y', label: 'UPH ' + dayLabel, sortable: true },
                 { key: 'uph_wtd', label: 'UPH Week', sortable: true },
-                { key: 'avc_y', label: 'AvC Yest', sortable: true },
+                { key: 'avc_y', label: 'AvC ' + dayLabel + avcTooltip, sortable: true, title: avcTitle },
                 { key: 'avc_wtd', label: 'AvC Week', sortable: true },
                 { key: 'avr_wtd', label: 'AvR Week', sortable: true },
                 { key: 'wasted_payroll', label: 'Wasted £', sortable: true },
@@ -1044,11 +1052,12 @@
             function buildHeader() {
                 let h = '<th>RM</th>';
                 columns.forEach(col => {
+                    const titleAttr = col.title ? ` title="${col.title}"` : '';
                     if (col.sortable) {
                         const sortClass = sortColumn === col.key ? (sortDirection === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-                        h += '<th class="sortable ' + sortClass + '" onclick="sortBy(\'' + col.key + '\')">' + col.label + '</th>';
+                        h += '<th class="sortable ' + sortClass + '" onclick="sortBy(\'' + col.key + '\')"' + titleAttr + '>' + col.label + '</th>';
                     } else {
-                        h += '<th>' + col.label + '</th>';
+                        h += '<th' + titleAttr + '>' + col.label + '</th>';
                     }
                 });
                 return h;
@@ -1221,6 +1230,18 @@
 
             let html = '';
 
+            // Add intraday warning banner if viewing today's data
+            const isToday = new Date().toISOString().split('T')[0] === (data.report_date || '');
+            if (isToday) {
+                html += '<div style="background:linear-gradient(135deg,#fff3cd 0%,#ffeaa7 100%);border-left:4px solid #ffc107;padding:12px 16px;margin-bottom:16px;border-radius:6px;display:flex;align-items:center;gap:12px;">';
+                html += '<div style="font-size:20px;">ℹ️</div>';
+                html += '<div>';
+                html += '<div style="font-weight:600;color:#856404;font-size:13px;">INTRADAY DATA</div>';
+                html += '<div style="font-size:12px;color:#856404;margin-top:2px;">AvC values may appear low when viewing partial-day data. Available hours accumulate throughout the day while confirmed hours represent full scheduled shifts.</div>';
+                html += '</div>';
+                html += '</div>';
+            }
+
             // Main stats row
             html += '<div class="summary-item">';
             html += '<div class="value">' + (data.stores_count || 0) + '</div>';
@@ -1316,10 +1337,14 @@
                 html += '<div class="region-title">' + regionName + ' Region</div>';
                 html += '<table><thead><tr>';
                 html += '<th>RM</th><th>Store</th>';
-                html += '<th>INF Yest</th><th>INF Week</th>';
-                html += '<th>Lates Yest</th><th>Lates Week</th>';
-                html += '<th>UPH Yest</th><th>UPH Week</th>';
-                html += '<th>AvC Yest</th><th>AvC Week</th><th>AvR Week</th>';
+                // Determine dynamic label based on current date
+                const isToday = currentDate === new Date().toISOString().split('T')[0];
+                const dayLabel = isToday ? 'Today' : 'Yest';
+
+                html += '<th>INF ' + dayLabel + '</th><th>INF Week</th>';
+                html += '<th>Lates ' + dayLabel + '</th><th>Lates Week</th>';
+                html += '<th>UPH ' + dayLabel + '</th><th>UPH Week</th>';
+                html += '<th>AvC ' + dayLabel + '</th><th>AvC Week</th><th>AvR Week</th>';
                 html += '<th>Wasted £</th><th>Missed £</th>';
                 html += '</tr></thead><tbody>';
 
@@ -1490,13 +1515,17 @@
             const regions = lastReportData.regions;
             const rows = [];
 
+            // Determine label dynamically
+            const isToday = currentDate === new Date().toISOString().split('T')[0];
+            const dayLabel = isToday ? 'Today' : 'Yesterday';
+
             // Header
             rows.push([
                 'Region', 'Manager', 'Store',
-                'INF Yesterday', 'INF WTD',
-                'Lates Yesterday', 'Lates WTD',
-                'UPH Yesterday', 'UPH WTD',
-                'AvC Yesterday', 'AvC WTD', 'AvR WTD',
+                'INF ' + dayLabel, 'INF WTD',
+                'Lates ' + dayLabel, 'Lates WTD',
+                'UPH ' + dayLabel, 'UPH WTD',
+                'AvC ' + dayLabel, 'AvC WTD', 'AvR WTD',
                 'Wasted Payroll', 'Missed Sales'
             ].join(','));
 

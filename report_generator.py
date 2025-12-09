@@ -47,8 +47,15 @@ class ReportGenerator:
         if headcount_csv:
             self.confirmed_hours = parse_confirmed_hours_csv(headcount_csv)
             print(f"Loaded confirmed hours for {len(self.confirmed_hours)} stores")
+            
+            # Also parse time windows for intraday AvC adjustments
+            from confirmed_hours import parse_time_windows_from_csv
+            self.time_windows = parse_time_windows_from_csv(headcount_csv)
+            if self.time_windows:
+                print(f"Loaded time windows for {len(self.time_windows)} stores (intraday AvC enabled)")
         else:
             print("Warning: No headcount CSV found. Confirmed hours will not be available.")
+            self.time_windows = {}
 
     def process_data(self, store_data_list, report_date=None):
         """Aggregate and enrich data for the report."""
@@ -171,6 +178,28 @@ class ReportGenerator:
         
         # Get confirmed hours from CSV
         confirmed_y = get_confirmed_hours_for_day(self.confirmed_hours, store_name, day_of_week)
+        
+        # 🔧 INTRADAY ADJUSTMENT: Use time-window-based calculation if running mid-day
+        # Check if we're calculating for today (not historical data)
+        from datetime import datetime
+        today = datetime.now().date()
+        
+        # Only apply intraday adjustment if we have time windows data
+        if hasattr(self, 'time_windows') and self.time_windows and confirmed_y:
+            from confirmed_hours import calculate_intraday_confirmed_hours
+            intraday_confirmed = calculate_intraday_confirmed_hours(
+                self.time_windows,
+                store_name,
+                day_of_week
+            )
+            if intraday_confirmed is not None and intraday_confirmed > 0:
+                confirmed_y_original = confirmed_y
+                confirmed_y = intraday_confirmed
+                app_logger.debug(
+                    f"[{store_name}] Intraday AvC adjustment: "
+                    f"{confirmed_y_original:.1f}hrs → {confirmed_y:.1f}hrs (elapsed windows only)"
+                )
+        
         confirmed_wtd = get_confirmed_hours_wtd(self.confirmed_hours, store_name, day_of_week)
         
         # Get forecasted (requested) hours from CSV  
@@ -431,9 +460,20 @@ class ReportGenerator:
                     gist_content = get_response.json()
                     if 'dashboard_data.json' in gist_content.get('files', {}):
                         file_content = gist_content['files']['dashboard_data.json'].get('content', '{}')
-                        existing_data = json.loads(file_content)
-            except:
-                pass  # Start fresh if fetch fails
+                        fetched_data = json.loads(file_content)
+                        # Merge fetched data (preserve existing historical data)
+                        existing_data['performance'] = fetched_data.get('performance', {})
+                        existing_data['inf_items'] = fetched_data.get('inf_items', {})
+                        existing_data['metadata'] = fetched_data.get('metadata', existing_data['metadata'])
+                        print(f"✅ Loaded {len(existing_data['performance'])} days of existing data from gist")
+                else:
+                    print(f"⚠️ Gist fetch returned {get_response.status_code}, starting with empty data")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch existing gist data: {e}")
+                print("   Starting fresh - historical data will be lost!")
+                # Keep the empty structure initialized above
+            
+            # Remove redundant structure checks since we initialize above
             
             # Ensure structure exists
             if 'metadata' not in existing_data:

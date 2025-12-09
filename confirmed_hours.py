@@ -7,7 +7,7 @@ Used for calculating "Available vs Confirmed Hours" in the daily report.
 
 import csv
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime, timedelta
 
 import logging
@@ -384,3 +384,170 @@ if __name__ == '__main__':
             print(f"  {name}: Mon={hours['monday']}, Sun={hours['sunday']}, Total={hours['total']}")
     else:
         print("No headcount CSV found")
+
+
+def parse_time_windows_from_csv(csv_path: str) -> Dict[str, List[Dict]]:
+    """
+    Parse time window rows from the Amazon Headcount CSV.
+    
+    Returns:
+        Dict mapping store name -> list of time windows, where each window is:
+        {
+            'start_time': time object (e.g., 07:30),
+            'end_time': time object (e.g., 09:30),
+            'monday': float, 'tuesday': float, ... (confirmed hours for each day)
+        }
+    """
+    from datetime import time as dt_time
+    
+    if not os.path.exists(csv_path):
+        return {}
+    
+    windows_data = {}
+    
+    try:
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+        
+        for row in rows:
+            if len(row) < 18:
+                continue
+            
+            window_str = row[3].strip() if len(row) > 3 else ""
+            
+            # Skip "Total Hours" rows
+            if not window_str or window_str.lower() == "total hours":
+                continue
+            
+            # Parse time window (e.g., "07.30-9.30")
+            if '-' in window_str:
+                try:
+                    start_str, end_str = window_str.split('-')
+                    start_time = parse_time_string(start_str.strip())
+                    end_time = parse_time_string(end_str.strip())
+                    
+                    if not start_time or not end_time:
+                        continue
+                    
+                    store_name = row[2].strip() if len(row) > 2 else ""
+                    if not store_name:
+                        continue
+                    
+                    def safe_float(val):
+                        try:
+                            return float(val.replace(',', '')) if val.strip() else 0.0
+                        except (ValueError, AttributeError):
+                            return 0.0
+                    
+                    window_entry = {
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'monday': safe_float(row[5] if len(row) > 5 else '0'),
+                        'tuesday': safe_float(row[7] if len(row) > 7 else '0'),
+                        'wednesday': safe_float(row[9] if len(row) > 9 else '0'),
+                        'thursday': safe_float(row[11] if len(row) > 11 else '0'),
+                        'friday': safe_float(row[13] if len(row) > 13 else '0'),
+                        'saturday': safe_float(row[15] if len(row) > 15 else '0'),
+                        'sunday': safe_float(row[17] if len(row) > 17 else '0'),
+                    }
+                    
+                    normalized_name = normalize_store_name(store_name)
+                    
+                    if normalized_name not in windows_data:
+                        windows_data[normalized_name] = []
+                    windows_data[normalized_name].append(window_entry)
+                    
+                    if store_name != normalized_name:
+                        if store_name not in windows_data:
+                            windows_data[store_name] = []
+                        windows_data[store_name].append(window_entry)
+                
+                except Exception:
+                    continue
+        
+        if windows_data:
+            app_logger.info(f"Loaded time windows for {len(windows_data)} stores")
+        return windows_data
+        
+    except Exception as e:
+        app_logger.error(f"Error parsing time windows: {e}")
+        return {}
+
+
+def parse_time_string(time_str: str) -> Optional:
+    """Parse time string like "07.30" into time object."""
+    from datetime import time as dt_time
+    
+    try:
+        time_str = time_str.strip().replace('.', ':')
+        if ':' in time_str:
+            parts = time_str.split(':')
+            if len(parts) == 2:
+                hour = int(parts[0])
+                minute = int(parts[1])
+                return dt_time(hour, minute)
+        return None
+    except (ValueError, AttributeError):
+        return None
+
+
+def calculate_intraday_confirmed_hours(
+    windows_data: Dict[str, List[Dict]],
+    store_name: str,
+    day_of_week: int,
+    current_time = None
+) -> Optional[float]:
+    """
+    Calculate confirmed hours for only elapsed time windows.
+    
+    Example at 11:00 AM:
+      - 07:30-09:30: 3 hrs → 3 hrs (100% elapsed)
+      - 09:30-11:30: 6.5 hrs → 4.88 hrs (75% elapsed)
+      - 11:30-13:30: 6 hrs → 0 hrs (not started)
+      Total: 7.88 hrs (vs 44 hrs full day)
+    """
+    from datetime import datetime
+    
+    if current_time is None:
+        current_time = datetime.now().time()
+    
+    day_names = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    
+    if day_of_week < 0 or day_of_week > 6:
+        return None
+    
+    day_key = day_names[day_of_week]
+    
+    store_windows = windows_data.get(store_name)
+    if not store_windows:
+        normalized = normalize_store_name(store_name)
+        store_windows = windows_data.get(normalized)
+    
+    if not store_windows:
+        return None
+    
+    total_hours = 0.0
+    
+    for window in store_windows:
+        window_hours = window.get(day_key, 0.0)
+        
+        if window_hours == 0:
+            continue
+        
+        start_time = window['start_time']
+        end_time = window['end_time']
+        
+        if current_time >= end_time:
+            # Fully elapsed
+            total_hours += window_hours
+        elif current_time > start_time:
+            # Partially elapsed - prorate
+            total_minutes = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
+            elapsed_minutes = (current_time.hour * 60 + current_time.minute) - (start_time.hour * 60 + start_time.minute)
+            
+            if total_minutes > 0:
+                elapsed_fraction = elapsed_minutes / total_minutes
+                total_hours += window_hours * elapsed_fraction
+    
+    return total_hours if total_hours > 0 else None
