@@ -1711,14 +1711,14 @@
             // --- Generate Single Store Analysis URL ---
             // Format: .../#/amazon/SKU:INF,SKU:INF...?locationId=STORE_ID
             let storeAnalysisUrl = '';
-            if (storeData.store_number && items.length > 0) {
+            if (storeData.store_id && items.length > 0) {
                 const skuList = items
                     .filter(i => i.sku)
-                    .map(i => `${i.sku}:${i.inf_count || 1}`)
+                    .map(i => i.sku + ':' + (i.inf_count || 1))
                     .join(',');
 
                 if (skuList) {
-                    storeAnalysisUrl = `https://amazon-product-analysis-584939250419.us-west1.run.app/#/amazon/${skuList}?locationId=${storeData.store_number}`;
+                    storeAnalysisUrl = 'https://amazon-product-analysis-584939250419.us-west1.run.app/#/amazon/' + skuList + '?locationId=' + storeData.store_id;
                 }
             }
 
@@ -1761,7 +1761,7 @@
                     else if (stockVal < 5) stockClass += ' low';
                 }
 
-                const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + (storeData.store_number || '') : '';
+                const analysisUrl = item.sku ? 'https://amazon-product-analysis-584939250419.us-west1.run.app/#/amazon/' + item.sku + ':' + (item.inf_count || 1) + '?locationId=' + (storeData.store_id || '') : '';
 
                 let html = '';
                 html += '<img class="product-image" src="' + (item.image_url || placeholderImg) + '" onerror="this.src=\'' + placeholderImg + '\'" />';
@@ -1786,7 +1786,6 @@
                 grid.appendChild(card);
             });
 
-            container.innerHTML = '';
             container.appendChild(grid);
         }
 
@@ -1922,12 +1921,12 @@
 
             const storeParts = stores
                 .filter(s => s.storeNumber) // Must have store number
-                .map(s => `${s.storeNumber}=${s.inf}`);
+                .map(s => s.storeNumber + '=' + s.inf);
 
             if (storeParts.length === 0) return '';
 
-            const payload = `${sku}:${storeParts.join(':')}`;
-            return `https://amazon-product-analysis-584939250419.us-west1.run.app/#/network/${payload}`;
+            const payload = sku + ':' + storeParts.join(':');
+            return 'https://amazon-product-analysis-584939250419.us-west1.run.app/#/network/' + payload;
         }
 
         function filterNetworkINF() {
@@ -2014,19 +2013,25 @@
                     const analysisUrl = generateNetworkAnalysisUrl(group.sku, group.stores);
                     const storeCount = group.stores.length;
 
-                    // Format stores tooltip or summary
-                    const storeSummary = group.stores.slice(0, 3).map(s => s.storeName).join(', ') + (storeCount > 3 ? ` +${storeCount - 3} more` : '');
+                    const storeSummary = group.stores.slice(0, 3).map(s => s.storeName).join(', ') + (storeCount > 3 ? ' +' + (storeCount - 3) + ' more' : '');
 
-                    row.innerHTML = `
-                        <td><img src="${group.image_url || placeholderImg}" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src='${placeholderImg}'"></td>
-                        <td><strong>${group.name || 'Unknown'}</strong><br><small style="color:#666;">SKU: ${group.sku || 'N/A'}</small></td>
-                        <td><div style="font-size:12px;"><strong>${storeCount}</strong> Stores</div><div style="font-size:11px;color:#666;">${storeSummary}</div></td>
-                        <td class="metric-bad" style="font-weight:600;font-size:14px;">${group.total_inf}</td>
-                        <td>${(group.stock_sum / storeCount).toFixed(1)}</td>
-                        <td>
-                            ${analysisUrl ? `<a href="${analysisUrl}" target="_blank" class="store-link" style="display:inline-block;padding:6px 12px;background:#ff9900;color:white;border-radius:4px;text-decoration:none;font-weight:bold;font-size:12px;">🚀 Analyze Network</a>` : '<span style="color:#999;font-size:12px;">No Store IDs</span>'}
-                        </td>
-                    `;
+                    let actionHtml = '<span style="color:#999;font-size:12px;">No Store IDs</span>';
+                    if (analysisUrl) {
+                        actionHtml = '<a href="' + analysisUrl + '" target="_blank" class="store-link" style="display:inline-block;padding:6px 12px;background:#ff9900;color:white;border-radius:4px;text-decoration:none;font-weight:bold;font-size:12px;">🚀 Analyze Network</a>';
+                    }
+
+                    const name = group.name || 'Unknown';
+                    const sku = group.sku || 'N/A';
+                    const img = group.image_url || placeholderImg;
+                    const stockAvg = (group.stock_sum / storeCount).toFixed(1);
+
+                    row.innerHTML = '<td><img src="' + img + '" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src=\'' + placeholderImg + '\'"></td>' +
+                        '<td><strong>' + name + '</strong><br><small style="color:#666;">SKU: ' + sku + '</small></td>' +
+                        '<td><div style="font-size:12px;"><strong>' + storeCount + '</strong> Stores</div><div style="font-size:11px;color:#666;">' + storeSummary + '</div></td>' +
+                        '<td class="metric-bad" style="font-weight:600;font-size:14px;">' + group.total_inf + '</td>' +
+                        '<td>' + stockAvg + '</td>' +
+                        '<td>' + actionHtml + '</td>';
+
                     tbody.appendChild(row);
                 });
 
@@ -2057,7 +2062,7 @@
                 displayItems.forEach(item => {
                     const row = document.createElement('tr');
                     const stockClass = item.stock === 0 ? 'metric-bad' : (item.stock !== null && item.stock < 5) ? 'metric-warn' : '';
-                    const analysisUrl = item.sku ? 'https://app.218.team/assistant/' + item.sku + '?locationId=' + item.storeNumber : '';
+                    const analysisUrl = item.sku ? 'https://amazon-product-analysis-584939250419.us-west1.run.app/#/amazon/' + item.sku + ':' + (item.inf_count || 1) + '?locationId=' + item.storeNumber : '';
 
                     row.innerHTML = '<td><img src="' + (item.image_url || placeholderImg) + '" style="width:50px;height:50px;object-fit:contain;background:white;border-radius:4px;" onerror="this.src=\'' + placeholderImg + '\'"></td>' +
                         '<td><strong>' + (item.name || 'Unknown') + '</strong><br><small style="color:#666;">SKU: ' + (item.sku || 'N/A') + '</small></td>' +

@@ -53,7 +53,7 @@ STORE_PREFIX_RE = re.compile(r"^morrisons\s*-\s*", re.I)
 # Morrisons API Config
 MORRISONS_API_KEY = config.get('morrisons_api_key')
 MORRISONS_BEARER_TOKEN_URL = config.get('morrisons_bearer_token_url') or "https://gist.githubusercontent.com/Daave2/b62faeed0dd435100773d4de775ff52d/raw/gistfile1.txt"
-ENRICH_STOCK_DATA = config.get('enrich_stock_data', True)  # Enabled by default
+ENRICH_STOCK_DATA = config.get('enrich_stock_data', False)  # Disabled by default (Light Mode)
 
 # Fetch bearer token from gist at startup
 MORRISONS_BEARER_TOKEN = None
@@ -389,8 +389,8 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
             
             await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
             
-            # Wait for API responses to complete (reduced from 3s to 1.5s)
-            await page.wait_for_timeout(1500)
+            # Wait for API responses to complete (Increased to 5s to ensure capture under load)
+            await page.wait_for_timeout(5000)
             
             # Apply date range if configured (same as main scraper)
             if date_range_func:
@@ -1424,7 +1424,11 @@ async def run_inf_analysis(target_stores: List[Dict] = None, provided_browser: B
             app_logger.debug(f"Error logging timing summary: {timing_err}")
 
         if local_playwright:
-            if browser: await browser.close()
+            if browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
             await local_playwright.stop()
 
 async def main():
@@ -1432,7 +1436,7 @@ async def main():
     
     # CLI Argument Parsing
     parser = argparse.ArgumentParser(description='INF Scraper (Standalone)')
-    parser.add_argument('--date-mode', choices=['today', 'yesterday', 'last_7_days', 'last_30_days', 'week_to_date', 'relative', 'custom'], help='Date range mode')
+    parser.add_argument('--date-mode', '--datemode', choices=['today', 'yesterday', 'last_7_days', 'last_30_days', 'week_to_date', 'relative', 'custom'], help='Date range mode')
     parser.add_argument('--start-date', help='Start date (MM/DD/YYYY)')
     parser.add_argument('--end-date', help='End date (MM/DD/YYYY)')
     parser.add_argument('--start-time', help='Start time (e.g., "12:00 AM")')
