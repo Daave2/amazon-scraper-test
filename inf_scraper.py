@@ -397,10 +397,11 @@ async def process_store_task(context, store_info, results_list, results_lock, fa
             if attempt > 0:
                 app_logger.info(f"[{store_name}] Retrying API capture (Attempt {attempt + 1}/{max_retries})...")
             
-            await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="domcontentloaded")
+            await page.goto(inf_url, timeout=PAGE_TIMEOUT, wait_until="networkidle")
             
-            # Wait for API responses to complete (Increased to 5s to ensure capture under load)
-            await page.wait_for_timeout(5000)
+            # Wait for API calls to complete (GetAllByAsin and ItemData)
+            # These happen async after page load, give them time
+            await page.wait_for_timeout(3000)
             
             # Apply date range if configured (same as main scraper)
             if date_range_func:
